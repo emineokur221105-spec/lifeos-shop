@@ -67,7 +67,7 @@
   - [ ] 接上 tenant-loader
   - [ ] 7 個 shop_data JS 檔逐一改寫
 - [ ] 原本的 `settings.html` 整併進 admin 後台
-- [ ] 改寫 `index.html` 成租戶功能選單（載完後顯示 4 按鈕，目前只有 roster 可用）
+- [x] 改寫 `index.html` 成租戶功能選單（深色版保留舊版 4 按鈕漸層色，roster 可點、shop/office/weekly 顯示「移植中」disabled）2026-04-20
 
 ### Phase 3：驗收（待開始）
 - [ ] Raymond 實際操作確認 UI 一模一樣
@@ -115,12 +115,11 @@
   - 有 ?t= 但租戶不存在會報錯（由 tenant-loader 丟）
 
 **下一步：**
-1. 改寫 `index.html` 成租戶功能選單（載完租戶後顯示 4 按鈕，目前 roster 可點、其他 3 個先 disabled）
-2. 搬 `office.html`（獨立頁、v11 modular 已是）
-3. 搬 `weekly.html`（v8 compat → v11 modular）
-4. 搬 `shop.html`（最硬，7 個 JS 檔）
-5. `settings.html` 整併進 admin
-6. `common.js` 等 shop.html 移植時依需求補
+1. 搬 `office.html`（獨立頁、v11 modular 已是）
+2. 搬 `weekly.html`（v8 compat → v11 modular）
+3. 搬 `shop.html`（最硬，7 個 JS 檔）
+4. `settings.html` 整併進 admin
+5. `common.js` 等 shop.html 移植時依需求補
 
 ---
 

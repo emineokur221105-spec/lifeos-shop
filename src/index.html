@@ -17,13 +17,19 @@
     padding: 20px;
     box-sizing: border-box;
   }
-  .box {
-    text-align: center;
-    max-width: 480px;
-    width: 100%;
+  .box { text-align: center; max-width: 420px; width: 100%; }
+  h1 { color: #27ae60; margin-bottom: 4px; }
+  .subtitle { color: #999; margin: 0 0 24px; font-size: 14px; }
+  .tenant-tag {
+    display: inline-block;
+    background: #222;
+    border: 1px solid #333;
+    color: #ffd700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    margin-bottom: 24px;
   }
-  h1 { color: #27ae60; margin-bottom: 8px; }
-  .subtitle { color: #999; margin-top: 0; margin-bottom: 24px; font-size: 14px; }
   .msg { background: #222; padding: 20px; border-radius: 8px; margin: 16px 0; line-height: 1.7; }
   .msg.ok { border-left: 4px solid #27ae60; }
   .msg.err { border-left: 4px solid #e74c3c; color: #ff8a80; }
@@ -31,6 +37,42 @@
   .msg.loading { border-left: 4px solid #f39c12; color: #ffd27d; }
   code { background: #333; padding: 2px 6px; border-radius: 3px; color: #ffd700; }
   .hint { font-size: 13px; color: #888; margin-top: 20px; }
+  .menu-btn {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    margin: 12px 0;
+    text-decoration: none;
+    color: white;
+    font-size: 17px;
+    font-weight: bold;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    transition: transform 0.15s, opacity 0.2s;
+    box-sizing: border-box;
+    text-align: center;
+  }
+  .menu-btn:active { transform: scale(0.98); }
+  .menu-btn.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .menu-btn .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: normal;
+    background: rgba(0,0,0,.3);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: 2px;
+  }
+  .btn-shop   { background: linear-gradient(135deg, #2c3e50, #3498db); }
+  .btn-office { background: linear-gradient(135deg, #16a085, #2ecc71); }
+  .btn-weekly { background: linear-gradient(135deg, #d35400, #f39c12); }
+  .btn-roster { background: linear-gradient(135deg, #8e44ad, #9b59b6); }
+  .footer { margin-top: 24px; font-size: 12px; color: #666; }
   .spinner {
     display: inline-block;
     width: 14px; height: 14px;
@@ -46,16 +88,15 @@
 </head>
 <body>
 <div class="box">
-  <h1>LifeOS-Shop</h1>
+  <h1>☁️ LifeOS Shop</h1>
   <p class="subtitle">多租戶門店管理系統</p>
-  <div id="status" class="msg info">正在啟動...</div>
+  <div id="app"></div>
 </div>
 
 <script type="module">
-  const statusEl = document.getElementById('status');
+  const app = document.getElementById('app');
   const setStatus = (html, kind) => {
-    statusEl.className = 'msg ' + (kind || 'info');
-    statusEl.innerHTML = html;
+    app.innerHTML = '<div class="msg ' + (kind || 'info') + '">' + html + '</div>';
   };
 
   const params = new URLSearchParams(window.location.search);
@@ -69,22 +110,18 @@
   else if (tenantCode) {
     try {
       setStatus('<span class="spinner"></span>驗證授權中...', 'loading');
-      await import('./core/security.js');
-      const tlMod = await import('./core/tenant-loader.js');
+      const { bootTenant } = await import('./core/tenant-boot.js');
+      const tenant = await bootTenant(msg => setStatus('<span class="spinner"></span>' + msg, 'loading'));
 
-      const whitelist = await tlMod.loadWhitelist();
-      await window.LifeOSSecurity.init({ allowedHashes: whitelist });
-
-      setStatus('<span class="spinner"></span>載入租戶 <code>' + tenantCode + '</code>...', 'loading');
-      const tenant = await tlMod.loadTenant(tenantCode);
-
-      setStatus(
-        '✅ 租戶已載入：<code>' + tenant.code + '</code>' +
-        (tenant.name && tenant.name !== tenant.code ? '（' + tenant.name + '）' : '') +
-        '<div class="hint">shop.html 尚未移植，Phase 2 完成後會自動跳轉。</div>',
-        'ok'
-      );
-      window.__lifeos_tenant = tenant;
+      // 載完後渲染功能選單
+      const q = '?t=' + encodeURIComponent(tenantCode);
+      app.innerHTML =
+        '<div class="tenant-tag">🏷 ' + (tenant.name ? (tenant.name + '（' + tenant.code + '）') : tenant.code) + '</div>' +
+        '<a href="./shop.html' + q + '" class="menu-btn btn-shop disabled">🏢 門店排班<span class="tag">移植中</span></a>' +
+        '<a href="./office.html' + q + '" class="menu-btn btn-office disabled">💰 分紅結算<span class="tag">移植中</span></a>' +
+        '<a href="./weekly.html' + q + '" class="menu-btn btn-weekly disabled">📊 週結業績<span class="tag">移植中</span></a>' +
+        '<a href="./roster.html' + q + '" class="menu-btn btn-roster">📋 服務資訊排版</a>' +
+        '<div class="footer">資料已連接租戶 Firebase</div>';
     } catch (err) {
       console.error('[LifeOS] 啟動失敗', err);
       setStatus('❌ ' + (err && err.message ? err.message : '啟動失敗'), 'err');
