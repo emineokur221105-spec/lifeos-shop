@@ -64,7 +64,13 @@
   - 搬到 `src/office.html`，原 504 行 UI / 邏輯完全保留
   - Firebase v11.0.2 → v11.0.1 統一版本，改用 bootTenant + tenantDb
   - index.html 的 office 按鈕解鎖
-- [ ] `weekly.html`（週結業績）
+- [x] `weekly.html`（週結業績）2026-04-20
+  - 搬到 `src/weekly.html`，原 838 行 UI / 邏輯完全保留
+  - Firebase v8 compat → v11 modular（刪 3 個 CDN `<script src>`）
+  - 所有 `db.ref().on/set/off` 轉 `onValue/set`，`.off()` → unsubscribe 模式（`currentSalesRef` → `currentSalesUnsub`）
+  - `auth.signInAnonymously()` → `signInAnonymously(auth)`
+  - `function changeWeek` → `window.changeWeek = function`（module 作用域下 onclick 要走 window）
+  - index.html 的 weekly 按鈕解鎖
 - [ ] `shop.html`（最大、最核心）
   - [ ] 改寫成 v11 modular
   - [ ] 接上 tenant-loader
@@ -118,10 +124,9 @@
   - 有 ?t= 但租戶不存在會報錯（由 tenant-loader 丟）
 
 **下一步：**
-1. 搬 `weekly.html`（v8 compat → v11 modular，獨立頁的業績對帳）
-2. 搬 `shop.html`（最硬，7 個 JS 檔）
-3. `settings.html` 整併進 admin
-4. `common.js` 等 shop.html 移植時依需求補
+1. 搬 `shop.html`（最硬，7 個 JS 檔：config/security/utils/schedule/settlement/app/weekly）
+2. `settings.html` 整併進 admin
+3. `common.js` 等 shop.html 移植時依需求補
 
 ---
 
