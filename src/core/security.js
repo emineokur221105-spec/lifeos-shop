@@ -55,7 +55,7 @@
   // 第三層：DevTools 尺寸偵測
   // 原理：DevTools 打開時 outerWidth - innerWidth 會變大
   function installDevToolsDetector(onDetected) {
-    const THRESHOLD = 160;
+    const THRESHOLD = 300;
     let triggered = false;
     setInterval(() => {
       const widthGap = window.outerWidth - window.innerWidth;
