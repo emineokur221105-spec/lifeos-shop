@@ -119,7 +119,20 @@
 ## 📝 當前進度
 
 **Phase 3 進行中（v11 統一 + admin 密碼升級 都做完了，等 kabe 實際驗收）**
-最後更新：2026-04-20 深夜 4 Asia/Taipei
+最後更新：2026-04-20 深夜 5 Asia/Taipei
+
+**剛完成（2026-04-20 深夜 5）：weekly.html 三大加強**
+- **F1 查帳總表可摺疊**：整條標題列改成可點擊（加 cursor + user-select:none），右側 `🔽 收起 / ▶ 展開` 狀態切換；內層表格 wrap 在 `tableViewWrapper` 以 display 切換
+- **F2 個人明細搜尋名稱**：在 report-header-bar 下方插入搜尋列（`personSearchInput`），oninput 呼叫 `filterPersonCards()` 逐張卡比對 `clickable-name` 文字；命中數顯示在右側提示；報表重繪時自動帶回搜尋狀態
+- **F3 合併名稱（方案 A 完整版）**：
+  - 資料：全域 `weekly_data/merges: { alias: master }`（一次設定所有週共用）
+  - 新增 `resolveMaster()`（帶 cycle 防呆）+ `applyMerges()`（把 rawPersonData 展開到 master，每筆資料保留 from=alias 來源）
+  - 卡片 header：合併卡片加紫色漸層（`.is-merged` class）+ 🔗 徽章顯示別名數量 + title 列出別名
+  - 每張卡右上加 🔗 鈕 → 開 modal 選其他 master 合併；合併卡片多 ✂️ 鈕可一鍵拆開所有別名
+  - 明細表格：來自別名的數字前加紫色 `(別名)` tag，本質不變、仍可查到原始來源
+  - 合併時自動解析 target 的最終 master + 把其他也指向 alias 的規則一起重指，避免鏈結破碎
+  - 修改 `parseAndCalculate → applyMerges` 後 `.data[d]` 變 `{val, from}` 物件陣列，detail 渲染用 typeof 防呆相容
+- 待 kabe 實際驗收
 
 **剛完成（2026-04-20 深夜 4）：office.html 週次化（方案 B）**
 - **移除下載報表按鈕** + `window.downloadReport` + html2canvas CDN（不再需要截圖功能）

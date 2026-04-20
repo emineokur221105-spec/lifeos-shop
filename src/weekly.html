@@ -70,9 +70,14 @@
 
         /* 💡 狀態顏色判定 (扁平化，無漸層) */
         .card-header { padding: 12px 15px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center; color: white; }
-        .header-pending { background-color: #f39c12; } 
-        .header-missing { background-color: #e74c3c; } 
+        .header-pending { background-color: #f39c12; }
+        .header-missing { background-color: #e74c3c; }
         .header-paid    { background-color: #95a5a6; } /* 已入帳變灰色，降低存在感 */
+        .card-header.is-merged { background: linear-gradient(135deg, #8e44ad, #9b59b6) !important; }
+        .merge-badge { font-size: 11px; background: rgba(0,0,0,0.25); color: white; padding: 2px 8px; border-radius: 10px; margin-left: 6px; font-weight: normal; }
+        .merge-btn { background: transparent; border: 0; cursor: pointer; padding: 2px 6px; font-size: 14px; color: rgba(255,255,255,0.85); }
+        .merge-btn:hover { color: white; transform: scale(1.1); }
+        .alias-tag { color: #9b59b6; font-size: 11px; font-weight: bold; margin-right: 2px; }
 
         .person-card.is-paid { opacity: 0.65; background: #fdfdfd; border-color: #bdc3c7; }
         .person-card.is-paid:hover { opacity: 1; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -174,10 +179,11 @@
         </div>
 
         <div id="tableViewSection" class="card-section" style="display:none; border-top: 4px solid #27ae60;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; cursor:pointer; user-select:none;" onclick="window.toggleAuditTable()">
                 <h3 style="margin:0; color:#2c3e50;">📋 查帳總表 (點擊右側打勾)</h3>
+                <span id="auditToggleIcon" style="font-size:14px; color:#7f8c8d; font-weight:bold;">🔽 收起</span>
             </div>
-            <div class="table-view-container">
+            <div id="tableViewWrapper" class="table-view-container">
                 <table class="table-view">
                     <thead>
                         <tr>
@@ -211,7 +217,14 @@
             <h2 style="margin: 0; text-align: left; font-size: 20px;">👥 個人明細與罐頭訊息</h2>
             <button class="btn-expand-all" id="globalToggleBtn" onclick="toggleAllDetails()">🔽 展開全部明細</button>
         </div>
-        
+
+        <div id="personSearchBar" style="display:none; margin-bottom:12px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="personSearchInput" placeholder="🔍 搜尋姓名..." oninput="window.filterPersonCards()" style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid #ccc; font-size:14px;">
+                <span id="personSearchHint" style="font-size:12px; color:#7f8c8d; min-width:70px;"></span>
+            </div>
+        </div>
+
         <div id="individualReports" class="report-container"></div>
 
         <div class="card-section" style="border-top: 4px solid #8e44ad; margin-top: 30px;">
@@ -277,6 +290,18 @@
         </div>
     </div>
 
+    <div id="mergeModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">🔗 合併名稱</h3>
+            <p style="font-size:13px; color:#555; margin:0 0 8px;">把 <strong id="mergeSourceName" style="color:#8e44ad;"></strong> 合併到：</p>
+            <div id="mergeTargetList" style="max-height:300px; overflow-y:auto; border:1px solid #eee; border-radius:8px; padding:8px;"></div>
+            <p style="font-size:11px; color:#7f8c8d; margin:8px 0 0;">💡 合併後資料會歸到所選名字底下，原始明細仍會以紫色標註顯示。</p>
+            <div class="btn-group" style="margin-top:10px;">
+                <button class="btn" style="background:#95a5a6;" onclick="window.closeMergeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast">✅ 操作成功！</div>
 
     <script type="module">
@@ -294,9 +319,10 @@
         if (__home && tenant.code) __home.href = './?t=' + encodeURIComponent(tenant.code);
 
         // --- 全域變數 ---
-        let localAccounts = []; 
-        let currentWeekId = ""; 
-        let weeklyStatus = {};  
+        let localAccounts = [];
+        let currentWeekId = "";
+        let weeklyStatus = {};
+        let mergeRules = {}; // { alias: master }
         let currentSalesUnsub = null;
         let currentStatusUnsub = null;
         let isAllDetailsExpanded = false;
@@ -467,6 +493,31 @@
             });
         };
 
+        window.toggleAuditTable = function() {
+            const wrap = document.getElementById('tableViewWrapper');
+            const icon = document.getElementById('auditToggleIcon');
+            if (!wrap || !icon) return;
+            const isHidden = wrap.style.display === 'none';
+            wrap.style.display = isHidden ? '' : 'none';
+            icon.innerText = isHidden ? '🔽 收起' : '▶ 展開';
+        };
+
+        window.filterPersonCards = function() {
+            const input = document.getElementById('personSearchInput');
+            const kw = (input ? input.value : '').trim().toLowerCase();
+            const cards = document.querySelectorAll('#individualReports .person-card');
+            let matched = 0;
+            cards.forEach(card => {
+                const nameEl = card.querySelector('.clickable-name');
+                const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+                const hit = !kw || name.includes(kw);
+                card.style.display = hit ? '' : 'none';
+                if (hit) matched++;
+            });
+            const hint = document.getElementById('personSearchHint');
+            if (hint) hint.innerText = kw ? `符合 ${matched} 筆` : '';
+        };
+
         const BANK_CODE_MAP = { "822": "🇨🇹 中國信託", "013": "🏦 國泰世華", "812": "💳 台新銀行", "808": "⛰️ 玉山銀行", "012": "💳 台北富邦", "700": "📮 中華郵政", "004": "🏛️ 台灣銀行", "008": "🏛️ 華南銀行", "807": "🏛️ 永豐銀行" };
         const BANK_KEYWORDS = { "國泰": "🏦 國泰世華", "世華": "🏦 國泰世華", "013": "🏦 國泰世華", "台新": "💳 台新銀行", "812": "💳 台新銀行", "中信": "🇨🇹 中國信託", "中國信託": "🇨🇹 中國信託", "822": "🇨🇹 中國信託", "玉山": "⛰️ 玉山銀行", "808": "⛰️ 玉山銀行", "富邦": "💳 台北富邦", "012": "💳 台北富邦", "郵局": "📮 中華郵政", "700": "📮 中華郵政" };
         
@@ -536,10 +587,49 @@
             return { personData, dailyTotals, grandTotal, hasData };
         }
 
+        // 解析合併規則鏈，避免循環
+        function resolveMaster(name) {
+            let cur = name;
+            const seen = new Set();
+            while (mergeRules[cur] && !seen.has(cur)) {
+                seen.add(cur);
+                cur = mergeRules[cur];
+            }
+            return cur;
+        }
+
+        // 把 rawPersonData 依 mergeRules 合併
+        function applyMerges(raw) {
+            const result = {};
+            Object.keys(raw).forEach(name => {
+                const master = resolveMaster(name);
+                if (!result[master]) {
+                    result[master] = {
+                        data: {0:[],1:[],2:[],3:[],4:[],5:[],6:[]},
+                        total: 0,
+                        aliases: []
+                    };
+                }
+                const src = raw[name];
+                DAY_ORDER.forEach(d => {
+                    src.data[d].forEach(v => {
+                        result[master].data[d].push({ val: v, from: name !== master ? name : null });
+                    });
+                });
+                result[master].total += src.total;
+                if (name !== master && !result[master].aliases.includes(name)) {
+                    result[master].aliases.push(name);
+                }
+            });
+            return result;
+        }
+
         // --- 核心：渲染報表與總表 ---
         function generateReport() {
             const input = $('inputData').value;
-            const { personData, dailyTotals, grandTotal, hasData } = parseAndCalculate(input);
+            const parsed = parseAndCalculate(input);
+            const { dailyTotals, grandTotal, hasData } = parsed;
+            const personData = applyMerges(parsed.personData);
             
             const reportDiv = $('individualReports');
             const tableViewBody = $('tableViewBody');
@@ -550,6 +640,8 @@
             $('reportHeader').style.display = hasData ? 'flex' : 'none';
             $('summarySection').style.display = hasData ? 'block' : 'none';
             $('tableViewSection').style.display = hasData ? 'block' : 'none';
+            const pSearch = document.getElementById('personSearchBar');
+            if (pSearch) pSearch.style.display = hasData ? 'block' : 'none';
 
             if (!hasData) return;
 
@@ -618,14 +710,20 @@
                 if(billWarning) copyTxt += `\n\n${billWarning}`;
 
                 let cardStateClass = "";
-                let headerStateClass = "header-pending"; 
+                let headerStateClass = "header-pending";
                 let statusText = "⏳ 待處理";
-                
+
                 if (isPaid) {
                     cardStateClass = "is-paid"; headerStateClass = "header-paid"; statusText = "✅ 已入帳";
                 } else if (isMissing) {
                     cardStateClass = "missing-account"; headerStateClass = "header-missing";
                 }
+
+                const isMerged = p.aliases && p.aliases.length > 0;
+                const mergedClass = isMerged ? ' is-merged' : '';
+                const mergedBadge = isMerged ? `<span class="merge-badge" title="${p.aliases.join(', ')}">🔗 ${p.aliases.length}</span>` : '';
+                const mergeBtn = `<button class="merge-btn" onclick="event.stopPropagation(); window.openMergeModal('${encodeURIComponent(name)}')" title="合併到其他名字">🔗</button>`;
+                const unmergeBtn = isMerged ? `<button class="merge-btn" onclick="event.stopPropagation(); window.unmergeMaster('${encodeURIComponent(name)}')" title="拆開合併">✂️</button>` : '';
 
                 const displayStyle = isAllDetailsExpanded ? 'block' : 'none';
                 const btnText = isAllDetailsExpanded ? '🔼 收起每日明細' : '🔽 展開每日明細';
@@ -633,8 +731,12 @@
                 // 🌟 卡片內容生成 🌟
                 let html = `
                 <div class="person-card ${cardStateClass}">
-                    <div class="card-header ${headerStateClass}">
-                        <span class="clickable-name" onclick="window.copyToClipboard('${encodeURIComponent(name)}', '✅ 複製姓名：${name}')" title="點擊複製姓名">${name}</span>
+                    <div class="card-header ${headerStateClass}${mergedClass}">
+                        <span style="display:flex; align-items:center; gap:4px;">
+                            <span class="clickable-name" onclick="window.copyToClipboard('${encodeURIComponent(name)}', '✅ 複製姓名：${name}')" title="點擊複製姓名">${name}</span>
+                            ${mergedBadge}
+                            ${mergeBtn}${unmergeBtn}
+                        </span>
                         <span style="font-size: 22px;">$${finalAmt.toLocaleString()}</span>
                     </div>
                     <div class="card-body">
@@ -645,8 +747,17 @@
                             <table class="detail-table">`;
                 
                 DAY_ORDER.forEach(d => {
-                    const arr = p.data[d]; const sum = arr.reduce((a,b)=>a+b, 0);
-                    if(arr.length > 0 || sum !== 0) html += `<tr><td class="col-day">${DAY_MAP[d]}</td><td class="col-data">${arr.join(', ')}</td><td class="col-subtotal">${sum}</td></tr>`;
+                    const arr = p.data[d];
+                    const sum = arr.reduce((a,b)=>a + (typeof b === 'object' ? b.val : b), 0);
+                    if(arr.length > 0 || sum !== 0) {
+                        const parts = arr.map(x => {
+                            if (typeof x === 'object') {
+                                return x.from ? `<span class="alias-tag">(${x.from})</span>${x.val}` : `${x.val}`;
+                            }
+                            return `${x}`;
+                        }).join(', ');
+                        html += `<tr><td class="col-day">${DAY_MAP[d]}</td><td class="col-data">${parts}</td><td class="col-subtotal">${sum}</td></tr>`;
+                    }
                 });
                 
                 html += `   </table>
@@ -704,6 +815,8 @@
             excelContent = "名稱\t總金額\t銀行\t帳號\n";
             excelList.forEach(item => { excelContent += `${item.name}\t${item.total}\t${item.bankName}\t${item.account}\n`; });
             window.excelStringToCopy = excelContent;
+
+            if (typeof window.filterPersonCards === 'function') window.filterPersonCards();
         }
 
         async function init() {
@@ -726,8 +839,79 @@
                 }
             });
 
+            onValue(ref(db, 'weekly_data/merges'), snap => {
+                mergeRules = snap.val() || {};
+                generateReport();
+            });
+
             initWeekSelector();
         }
+
+        window.openMergeModal = function(encodedName) {
+            const name = decodeURIComponent(encodedName);
+            const input = $('inputData').value;
+            const { personData: raw } = parseAndCalculate(input);
+            // 取得所有「解析後的 master 名單」，排除自己與會造成自我合併的名字
+            const allMasters = new Set();
+            Object.keys(raw).forEach(n => allMasters.add(resolveMaster(n)));
+            allMasters.delete(name);
+
+            // 也允許合併到目前不在本週出現、但其他週出現過的 master（mergeRules 的 value 們）
+            Object.values(mergeRules).forEach(m => { if (m !== name) allMasters.add(m); });
+
+            $('mergeSourceName').innerText = name;
+            const listDiv = $('mergeTargetList');
+            const candidates = [...allMasters].sort((a,b) => a.localeCompare(b, 'zh-Hant'));
+            if (candidates.length === 0) {
+                listDiv.innerHTML = '<div style="color:#95a5a6; text-align:center; padding:20px;">沒有其他名稱可以合併</div>';
+            } else {
+                listDiv.innerHTML = candidates.map(c =>
+                    `<div style="padding:10px 12px; border-bottom:1px solid #f0f0f0; cursor:pointer; border-radius:6px;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''" onclick="window.confirmMerge('${encodeURIComponent(name)}','${encodeURIComponent(c)}')">→ <strong>${c}</strong></div>`
+                ).join('');
+            }
+            $('mergeModal').style.display = 'flex';
+        };
+
+        window.closeMergeModal = function() {
+            $('mergeModal').style.display = 'none';
+        };
+
+        window.confirmMerge = function(encAlias, encMaster) {
+            const alias = decodeURIComponent(encAlias);
+            const master = decodeURIComponent(encMaster);
+            if (alias === master) { alert('不能合併到自己'); return; }
+
+            // 解析 master 的最終 master（避免鏈結破碎）
+            let finalMaster = master;
+            const seen = new Set();
+            while (mergeRules[finalMaster] && !seen.has(finalMaster)) {
+                seen.add(finalMaster);
+                finalMaster = mergeRules[finalMaster];
+            }
+            if (finalMaster === alias) { alert('會造成循環合併'); return; }
+
+            const next = { ...mergeRules, [alias]: finalMaster };
+            // 如果目前有其他別名指向 alias，讓它們一起指到 finalMaster
+            Object.keys(next).forEach(k => { if (next[k] === alias) next[k] = finalMaster; });
+
+            set(ref(db, 'weekly_data/merges'), next).then(() => {
+                showToast(`✅ 已把 ${alias} 合併到 ${finalMaster}`);
+                window.closeMergeModal();
+            });
+        };
+
+        window.unmergeMaster = function(encMaster) {
+            const master = decodeURIComponent(encMaster);
+            const aliases = Object.keys(mergeRules).filter(k => resolveMaster(k) === master && k !== master);
+            if (aliases.length === 0) { alert('這張卡片沒有合併的別名'); return; }
+            if (!confirm(`要拆開 ${master} 的合併嗎？\n將還原：${aliases.join('、')}`)) return;
+
+            const next = { ...mergeRules };
+            aliases.forEach(a => delete next[a]);
+            set(ref(db, 'weekly_data/merges'), next).then(() => {
+                showToast(`✂️ 已拆開 ${master} 的合併`);
+            });
+        };
 
         function renderAccountTable() {
             const tbody = document.getElementById('accTableBody');
