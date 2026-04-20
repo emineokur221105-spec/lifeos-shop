@@ -111,6 +111,9 @@
         <h3>📋 雲端管理名單</h3>
         <span onclick="toggleSidebar()" style="cursor:pointer; font-size:1.2rem; display:none;" class="mobile-close">✖</span>
     </div>
+    <div style="padding:8px 10px;">
+        <a id="homeLink" href="index.html" style="display:inline-block; background:#34495e; color:white; padding:6px 12px; border-radius:6px; font-size:13px; font-weight:bold; text-decoration:none;">🏠 首頁</a>
+    </div>
     
     <div class="view-toggle">
         <button id="btn-view-active" onclick="switchView('active')">🟢 在職名單</button>
@@ -227,6 +230,9 @@
     const db = tenant.tenantDb;
     const rosterRef = ref(db, 'roster');
     document.title = 'LifeOS · 服務資訊排版（' + (tenant.name || tenant.code) + '）';
+    // 首頁按鈕帶回該租客入口（?t=<code>）
+    const __home = document.getElementById('homeLink');
+    if (__home && tenant.code) __home.href = './?t=' + encodeURIComponent(tenant.code);
 
     let currentId = null; 
     let allMembers = {}; 

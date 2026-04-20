@@ -11,66 +11,17 @@
 
     <!-- html2canvas 用於「日結截圖匯出」功能 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <!-- Firebase v11 modular SDK：由 shop/firebase-compat.js 包裝成 v8 風格 API 掛到 window.__shopDb -->
-    <!-- 不再載入 8.10.1 compat SDK，避免雙 SDK 衝突 -->
-
 
     <link rel="stylesheet" href="shop/shop_data/style.css">
 </head>
 <body>
 
-<!-- 開機流程：
-     1. bootTenant() — 驗白名單、抓租戶 Firebase config
-     2. initShopDb() — v11 modular SDK 包成 v8 風格 API，掛到 window.__shopDb
-     3. 動態載入 shop_data/*.js（classic script），各檔透過 const db = window.__shopDb 取得 db -->
-<script type="module">
-  import { bootTenant } from './core/tenant-boot.js';
-  import { wrapShopDb } from './shop/firebase-compat.js';
-
-  try {
-    const tenant = await bootTenant();
-    window.TENANT_NAME = tenant.name;
-    window.TENANT_CODE = tenant.code;
-    // bootTenant 已用 v11 modular SDK 開好 tenantDb；這裡只需包一層 v8 風格殼
-    window.__shopDb = wrapShopDb(tenant.tenantDb);
-    document.title = `${tenant.name} - 門店管理`;
-  } catch (e) {
-    console.error('[shop] 租戶開機失敗:', e);
-    document.body.innerHTML = `<div style="padding:40px;text-align:center;color:#c0392b;font-family:sans-serif;">
-      <h2>⚠️ 無法載入門店資料</h2>
-      <p>${e.message || e}</p>
-      <p><a href="./" style="color:#3498db;">返回首頁</a></p>
-    </div>`;
-    throw e;
-  }
-
-  // 動態依序載入 shop_data/*.js（classic script，共享 script-global 作用域）
-  async function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = resolve;
-      s.onerror = () => reject(new Error('載入失敗: ' + src));
-      document.body.appendChild(s);
-    });
-  }
-
-  const files = [
-    'shop/shop_data/config.js',     // 必須第一個（讀 window.__shopDb 成 const db、宣告全域變數）
-    'shop/shop_data/utils.js',
-    'shop/shop_data/schedule.js',
-    'shop/shop_data/settlement.js',
-    'shop/shop_data/app.js',        // 頂層會呼叫 initSchedule()
-    'shop/shop_data/weekly.js'
-  ];
-  for (const f of files) {
-    await loadScript(f);
-  }
-</script>
+<!-- 入口點：main.js 負責驗租戶 → 注入 db → 啟動 UI（純 v11 modular ES module） -->
+<script type="module" src="./shop/shop_data/main.js"></script>
 
 <nav class="nav-bar">
     <div class="app-title">
-        <a href="index.html" class="btn-home">🏠 首頁</a>
+        <a href="index.html" id="homeLink" class="btn-home">🏠 首頁</a>
         
         🏢 門店管理(分店版) <span class="sync-dot" id="syncStatus"></span>
         
@@ -443,8 +394,6 @@
 </div>
 
 <div id="toast">✅ 已複製到剪貼簿！</div>
-
-<!-- shop_data/*.js 已由頂部 module 動態載入（驗租戶完才載，避免無授權就跑）-->
 
 </body>
 </html>

@@ -146,7 +146,7 @@
 
     <nav class="nav-bar">
         <div class="app-title">
-            <a href="index.html" class="btn-home">🏠 首頁</a>
+            <a href="index.html" id="homeLink" class="btn-home">🏠 首頁</a>
             📊 業績與入帳管理
         </div>
         <span id="systemModeBadge" class="mode-badge mode-connecting">連線中...</span>
@@ -289,6 +289,9 @@
         const db = tenant.tenantDb;
         const auth = getAuth(tenant.tenantApp);
         document.title = 'LifeOS · 週結業績（' + (tenant.name || tenant.code) + '）';
+        // 首頁按鈕帶回該租客入口（?t=<code>）
+        const __home = document.getElementById('homeLink');
+        if (__home && tenant.code) __home.href = './?t=' + encodeURIComponent(tenant.code);
 
         // --- 全域變數 ---
         let localAccounts = []; 

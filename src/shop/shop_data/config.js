@@ -1,127 +1,78 @@
-// === config.js : 設定與資料狀態 ===
+// 系統層預設值 + 從 Firebase 讀 system_config 覆蓋
+import { state } from './state.js';
+import { dbVal } from './shop-db.js';
 
-// ==========================================
-// 0. 系統設定物件（預設值，會被 Firebase system_config 覆蓋）
-// ==========================================
-const SYSTEM_CONFIG = {
-    systemPassword: "8888",
-    defaultAgentRate: 300,
-    pxPerMin: 2,
-    defaultOpenHour: 12,
-    defaultCloseHour: 26,
-    pricingTable: [
-        { duration: 40, count: 1, comm: 1100, cost: 2300, work: 1 },
-        { duration: 60, count: 1, comm: 1400, cost: 2700, work: 1 },
-        { duration: 60, count: 2, comm: 1900, cost: 3300, work: 1 },
-        { duration: 120, count: 3, comm: 2800, cost: 4800, work: 2 },
-        { duration: 240, count: 3, comm: 4200, cost: 8100, work: 3 }
-    ],
-    workUnitTable: { 40: 1, 50: 1, 60: 1, 120: 2, 200: 3, 240: 3 },
-    auntExtraNames: ["顏同", "有菜", "澄澄", "姚貴", "曼達", "阿鳴", "鳴"],
-    auntExtraAmount: 100,
-    auntDivisor: 100
+export const SYSTEM_CONFIG = {
+  systemPassword: '8888',
+  defaultAgentRate: 300,
+  pxPerMin: 2,
+  defaultOpenHour: 12,
+  defaultCloseHour: 26,
+  pricingTable: [
+    { duration: 40,  count: 1, comm: 1100, cost: 2300, work: 1 },
+    { duration: 60,  count: 1, comm: 1400, cost: 2700, work: 1 },
+    { duration: 60,  count: 2, comm: 1900, cost: 3300, work: 1 },
+    { duration: 120, count: 3, comm: 2800, cost: 4800, work: 2 },
+    { duration: 240, count: 3, comm: 4200, cost: 8100, work: 3 },
+  ],
+  workUnitTable: { 40: 1, 50: 1, 60: 1, 120: 2, 200: 3, 240: 3 },
+  auntExtraNames: ['顏同', '有菜', '澄澄', '姚貴', '曼達', '阿鳴', '鳴'],
+  auntExtraAmount: 100,
+  auntDivisor: 100,
 };
 
-// ==========================================
-// 1. Firebase 設定（統一版 v11 modular：由 shop.html 的 module 開機先行呼叫 initShopDb()
-//    把 v8 風格的 db 掛到 window.__shopDb，這裡直接撿起來用）
-// ==========================================
-const db = window.__shopDb;
-if (!db) {
-    throw new Error('❌ 租戶 Firebase 尚未初始化（window.__shopDb 為空），請從 index.html 透過 ?t=<代號> 進入');
-}
-
-// ==========================================
-// 2. 從 Firebase 載入 system_config 覆蓋預設值
-// ==========================================
-async function loadSystemConfig() {
-    try {
-        const snap = await db.ref('system_config').once('value');
-        const val = snap.val();
-        if (val) {
-            // 逐一覆蓋，保留未設定的預設值
-            if (val.systemPassword !== undefined) SYSTEM_CONFIG.systemPassword = val.systemPassword;
-            if (val.defaultAgentRate !== undefined) SYSTEM_CONFIG.defaultAgentRate = val.defaultAgentRate;
-            if (val.pxPerMin !== undefined) SYSTEM_CONFIG.pxPerMin = val.pxPerMin;
-            if (val.defaultOpenHour !== undefined) SYSTEM_CONFIG.defaultOpenHour = val.defaultOpenHour;
-            if (val.defaultCloseHour !== undefined) SYSTEM_CONFIG.defaultCloseHour = val.defaultCloseHour;
-            if (val.auntExtraAmount !== undefined) SYSTEM_CONFIG.auntExtraAmount = val.auntExtraAmount;
-            if (val.auntDivisor !== undefined) SYSTEM_CONFIG.auntDivisor = val.auntDivisor;
-            if (Array.isArray(val.auntExtraNames)) SYSTEM_CONFIG.auntExtraNames = val.auntExtraNames;
-            if (Array.isArray(val.pricingTable)) SYSTEM_CONFIG.pricingTable = val.pricingTable;
-            if (val.workUnitTable && typeof val.workUnitTable === 'object') {
-                SYSTEM_CONFIG.workUnitTable = {};
-                for (const [k, v] of Object.entries(val.workUnitTable)) {
-                    SYSTEM_CONFIG.workUnitTable[parseInt(k)] = v;
-                }
-            }
+export async function loadSystemConfig() {
+  try {
+    const t = await dbVal('system_config');
+    if (t) {
+      if (t.systemPassword   !== undefined) SYSTEM_CONFIG.systemPassword   = t.systemPassword;
+      if (t.defaultAgentRate !== undefined) SYSTEM_CONFIG.defaultAgentRate = t.defaultAgentRate;
+      if (t.pxPerMin         !== undefined) SYSTEM_CONFIG.pxPerMin         = t.pxPerMin;
+      if (t.defaultOpenHour  !== undefined) SYSTEM_CONFIG.defaultOpenHour  = t.defaultOpenHour;
+      if (t.defaultCloseHour !== undefined) SYSTEM_CONFIG.defaultCloseHour = t.defaultCloseHour;
+      if (t.auntExtraAmount  !== undefined) SYSTEM_CONFIG.auntExtraAmount  = t.auntExtraAmount;
+      if (t.auntDivisor      !== undefined) SYSTEM_CONFIG.auntDivisor      = t.auntDivisor;
+      if (Array.isArray(t.auntExtraNames)) SYSTEM_CONFIG.auntExtraNames = t.auntExtraNames;
+      if (Array.isArray(t.pricingTable))   SYSTEM_CONFIG.pricingTable   = t.pricingTable;
+      if (t.workUnitTable && typeof t.workUnitTable === 'object') {
+        SYSTEM_CONFIG.workUnitTable = {};
+        for (const [k, v] of Object.entries(t.workUnitTable)) {
+          SYSTEM_CONFIG.workUnitTable[parseInt(k)] = v;
         }
-    } catch(e) {
-        console.warn('載入 system_config 失敗，使用預設值:', e);
+      }
     }
-
-    // 載入後同步全局變數
-    applySystemConfig();
+  } catch (e) {
+    console.warn('載入 system_config 失敗，使用預設值:', e);
+  }
+  applySystemConfig();
 }
 
-function applySystemConfig() {
-    // 同步 PX_PER_MIN
-    PX_PER_MIN = SYSTEM_CONFIG.pxPerMin;
-    // 同步 WORK_UNIT_TABLE
-    WORK_UNIT_TABLE = { ...SYSTEM_CONFIG.workUnitTable };
-    // 同步 AUNT_EXTRA_NAMES
-    AUNT_EXTRA_NAMES = [...SYSTEM_CONFIG.auntExtraNames];
+export function applySystemConfig() {
+  state.PX_PER_MIN        = SYSTEM_CONFIG.pxPerMin;
+  state.WORK_UNIT_TABLE   = { ...SYSTEM_CONFIG.workUnitTable };
+  state.AUNT_EXTRA_NAMES  = [...SYSTEM_CONFIG.auntExtraNames];
 
-    // 同步底薪/底價 hidden inputs（如果存在的話）
-    SYSTEM_CONFIG.pricingTable.forEach(row => {
-        const key = `${row.duration}_${row.count}`;
-        const baseEl = document.getElementById('base_' + key);
-        const costEl = document.getElementById('cost_' + key);
-        if (baseEl) baseEl.value = row.comm;
-        if (costEl) costEl.value = row.cost;
-    });
+  SYSTEM_CONFIG.pricingTable.forEach(t => {
+    const key = `${t.duration}_${t.count}`;
+    const commInput = document.getElementById('base_' + key);
+    const costInput = document.getElementById('cost_' + key);
+    if (commInput) commInput.value = t.comm;
+    if (costInput) costInput.value = t.cost;
+  });
 
-    // 同步開關門時間
-    const openEl = document.getElementById('openHour');
-    const closeEl = document.getElementById('closeHour');
-    if (openEl && !openEl.dataset.userSet) openEl.value = SYSTEM_CONFIG.defaultOpenHour;
-    if (closeEl && !closeEl.dataset.userSet) closeEl.value = SYSTEM_CONFIG.defaultCloseHour;
+  const openH  = document.getElementById('openHour');
+  const closeH = document.getElementById('closeHour');
+  if (openH  && !openH.dataset.userSet)  openH.value  = SYSTEM_CONFIG.defaultOpenHour;
+  if (closeH && !closeH.dataset.userSet) closeH.value = SYSTEM_CONFIG.defaultCloseHour;
 }
 
-// 動態產生 hidden inputs（由 shop.html 呼叫）
-function generatePricingInputs() {
-    const container = document.getElementById('pricingInputsContainer');
-    if (!container) return;
-    container.innerHTML = '';
-    SYSTEM_CONFIG.pricingTable.forEach(row => {
-        const key = `${row.duration}_${row.count}`;
-        container.innerHTML += `<input type="hidden" id="base_${key}" value="${row.comm}">`;
-        container.innerHTML += `<input type="hidden" id="cost_${key}" value="${row.cost}">`;
-    });
+export function generatePricingInputs() {
+  const container = document.getElementById('pricingInputsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  SYSTEM_CONFIG.pricingTable.forEach(row => {
+    const key = `${row.duration}_${row.count}`;
+    container.innerHTML += `<input type="hidden" id="base_${key}" value="${row.comm}">`;
+    container.innerHTML += `<input type="hidden" id="cost_${key}" value="${row.cost}">`;
+  });
 }
-
-// ==========================================
-// 3. 全局變數（可被 system_config 覆蓋）
-// ==========================================
-let PX_PER_MIN = SYSTEM_CONFIG.pxPerMin;
-let WORK_UNIT_TABLE = { ...SYSTEM_CONFIG.workUnitTable };
-let AUNT_EXTRA_NAMES = [...SYSTEM_CONFIG.auntExtraNames];
-
-let REGIONS = [];
-let currentRegion = ["All"];
-let roomConfig = {};
-let regionPrefixes = {};
-let staffData = [];
-let services = [];
-
-// 當前操作狀態
-let currentEditingStaffId = null;
-let currentTaskElement = null;
-let currentTaskInfo = null;
-let currentParamsStaffId = null;
-
-// 日結鎖定狀態
-let isLocked = false;
-
-// 是否僅顯示上班人員的開關
-let showWorkingOnly = false;

@@ -179,6 +179,29 @@
 
 ---
 
+## 🔧 2026-04-20 深夜：shop_data/*.js 整組升 v11 modular（方案乙 full rewrite）
+
+**前情**：白天 v8 compat shim 版雖救了 DCE 問題，但仍混用兩套 SDK，且 `firebase-compat.js` 的 `.on()` 模擬有邊角 bug。kabe 直接下指示「改玩（完）一起測」、「一次到位」，授權 full rewrite。
+
+**這回做了什麼**：
+1. **新增 `shop_data/state.js`**：single source of truth，把原本散在各檔的 script-global 變數（REGIONS / roomConfig / staffData / services / currentActiveDate / expenseGroups …）集中到一個 `state` 物件 export 出去。
+2. **新增 `shop_data/shop-db.js`**：v11 modular helper 層。export `setDb` / `dbRef` / `dbGet` / `dbVal` / `dbSet` / `dbUpdate` / `dbPushKey` / `dbRemove` / `dbOn`（回傳 unsubscribe） / `dbOff`，並 re-export 原生 `ref/get/set/update/push/remove/onValue/off`。
+3. **新增 `shop_data/config.js`**：`SYSTEM_CONFIG` 預設 + `loadSystemConfig()` 從 `system_config` 路徑讀雲端覆蓋、`applySystemConfig()` 同步到 DOM + `state`。
+4. **重寫 `shop_data/utils.js`**：對齊舊版函數簽名（`parseTime` 跨半夜 +24 / `formatDuration` / `getTaskHash(rawText, startMinutes)` / `showToast(msg)` className toggle / `getRegionColor` 8 色盤 / `playLoudAlarm` 4 秒自動停 / `getGlobalPricingTables` / `getTodayDateStr` / `safeDateKey`）。
+5. **重寫 `shop_data/schedule.js`**：`renderSidebar` / `renderTracksOnly` / `updateTimeLineAndClock` / `renderScheduleAll`（150ms debounce） / `initRowResize` / `initScheduleDragHandlers` / `quickPaste`；5 分鐘 / 開始 / 結束鬧鐘提醒保留。
+6. **重寫 `shop_data/settlement.js`**：卡片 HTML 改由 helper 組；staff.customConfig override / 阿姨加名 +100 / 經紀費計算全保留；`pushDailySummary` 寫 `shop_v8_daily_summaries/<safeDate>`；`copyDailyReport` / `copyAuntText` / `copySingleSettlementToExcel` / `copyFullSettlementToExcel`。
+7. **重寫 `shop_data/weekly.js`**：CSS `injectWeeklyCss()` 一次性注入；週支出群組存 `shop_v8_weekly_expenses/<safeKey>`（`safeKey = rangeStr.replace('/','-').replace(' ','')`）。
+8. **重寫 `shop_data/app.js`（~1155 行）**：`initSchedule()` + `emergencyWipe()` + `exposeGlobals()`，UI 行為（tab 切換、modal、zoom、regional 過濾、staff/room/service CRUD、copy-to-clipboard、截圖、緊急清空）全收斂在此。`exposeGlobals()` 一次把 ~50 個 onclick handler `Object.assign` 到 `window`（module scope 不自動掛 global，必須手動暴露）。
+9. **新增 `shop_data/main.js`**：入口點。`bootTenant()` → `setDb(tenant.tenantDb)` → `exposeGlobals()` → `await initSchedule()` → 還原 `localStorage.appZoomLevel` 縮放。
+10. **`src/shop.html` 大瘦身**：移除 `firebase-compat.js` import、移除動態 `loadScript` 6 檔 loop，全部換成單行 `<script type="module" src="./shop/shop_data/main.js"></script>`。刪除底部的 `shop_data/*.js 已由頂部 module 動態載入` 註解。
+11. **刪除 `src/shop/firebase-compat.js`**（不再需要）。
+
+**build 驗證**：`node build.js` 通過，7 個 shop_data 模組都以 `(module)` 模式壓縮，沒跨檔污染。本機 server（8080）serve `shop.html` / `main.js` / `app.js` 皆 200。
+
+**下一步**：kabe 瀏覽器實測 `http://localhost:8080/shop.html?t=demo-qinre-main` 驗 UI 一模一樣 → 驗過再 commit + push。
+
+---
+
 ## 🔧 2026-04-20 夜：shop 升 v11 + build.js 隱性 bug
 
 **現象**：使用者反映 `shop.html` 進入排班 tab「完全空白、按鈕失效」。

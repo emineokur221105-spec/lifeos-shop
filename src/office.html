@@ -110,9 +110,12 @@
 <body class="py-8 px-4 max-w-7xl mx-auto">
 
   <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 no-export">
-    <div class="flex items-center text-xs text-slate-400 font-mono bg-slate-800 px-3 py-1.5 rounded-full shadow-sm border border-slate-700">
-      <span id="sync-status-dot" class="status-dot status-syncing"></span>
-      <span id="sync-status-text">Connecting...</span>
+    <div class="flex items-center gap-3">
+      <a id="homeLink" href="index.html" class="text-sm text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full border border-slate-700 font-bold no-underline">🏠 首頁</a>
+      <div class="flex items-center text-xs text-slate-400 font-mono bg-slate-800 px-3 py-1.5 rounded-full shadow-sm border border-slate-700">
+        <span id="sync-status-dot" class="status-dot status-syncing"></span>
+        <span id="sync-status-text">Connecting...</span>
+      </div>
     </div>
     <div class="flex gap-3">
       <button onclick="window.resetCloudData()" class="text-sm text-slate-500 hover:text-red-400 transition px-3 py-2 font-bold">
@@ -218,6 +221,9 @@
     const db = tenant.tenantDb;
     const dbRef = ref(db, 'office_settlement_v8_dark');
     document.title = 'LifeOS · 分紅結算（' + (tenant.name || tenant.code) + '）';
+    // 首頁按鈕帶回該租客入口（?t=<code>）
+    const __home = document.getElementById('homeLink');
+    if (__home && tenant.code) __home.href = './?t=' + encodeURIComponent(tenant.code);
 
     let shareholders = [];
     let expenses = [];
