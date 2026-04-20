@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>團隊分紅系統 (V8 深色質感版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <style>
@@ -120,9 +119,6 @@
     <div class="flex gap-3">
       <button onclick="window.resetCloudData()" class="text-sm text-slate-500 hover:text-red-400 transition px-3 py-2 font-bold">
         🗑️ 重置
-      </button>
-      <button onclick="window.downloadReport()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg shadow-lg shadow-blue-900/50 flex items-center gap-2 font-bold transition active:scale-95 text-sm border border-blue-500">
-        <span id="btn-text">📸 下載報表</span>
       </button>
     </div>
   </div>
@@ -478,24 +474,6 @@
         shareholders = defaultData.shareholders; expenses = defaultData.expenses; income = 0;
         saveDataToCloud(); window.renderAll();
       }
-    }
-    window.downloadReport = function() {
-      const btnText = document.getElementById('btn-text');
-      btnText.innerText = "處理中...";
-      const node = document.getElementById('report-card');
-      
-      // 截圖設定：確保背景顏色正確
-      html2canvas(node, { 
-        scale: 2, 
-        backgroundColor: "#0f172a", // 強制設定背景為深色
-        useCORS: true 
-      }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `財務報表(黑)_${new Date().toISOString().slice(0,10)}.jpg`;
-        link.href = canvas.toDataURL("image/jpeg", 0.95);
-        link.click();
-        btnText.innerText = "📸 下載報表";
-      });
     }
   </script>
 </body>
