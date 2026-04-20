@@ -39,6 +39,13 @@
 - [x] `一鍵部署.bat` Raymond 雙擊用
 - [x] `LOCAL_SECRETS.md` gitignore 存主 Firebase config
 - [x] 驗證 Pipeline 通過：線上 boot.js 確實被混淆 ✅
+- [x] **HTML 內嵌 `<script>` 也進混淆流程** 2026-04-20
+  - 原本只有獨立 `.js` 被 terser 壓縮，所有頁面的內嵌 JS 是明碼
+  - 新增 `minifyHtmlInlineScripts()`：正則找 `<script>...</script>`，跳過有 `src=` 的外部引用，內嵌 body 進 terser
+  - 自動偵測 `type="module"` → 用 module 模式（支援 top-level await）
+  - 獨立 `.js` 也升級：偵測 `import/export` 決定 module 模式，`ecma: 2022`
+  - 同步建立 `FUTURE_IMPROVEMENTS.md`（P1/P2/P3 分級），記錄未來還要做什麼
+  - 哲學：**先求有，再求好**
 
 ### Phase 1：核心架構（進行中）
 - [x] Raymond 開「主 Firebase」project：`lifeos-shop-main`（config 存 LOCAL_SECRETS.md）
@@ -124,7 +131,7 @@
   - 有 ?t= 但租戶不存在會報錯（由 tenant-loader 丟）
 
 **下一步：**
-1. 搬 `shop.html`（最硬，7 個 JS 檔：config/security/utils/schedule/settlement/app/weekly）
+1. 搬 `shop.html`（採方案 C：先用 v8 compat 整頁搬過來 + 換 Firebase config 來源，之後再逐檔改 v11 modular → 詳見 FUTURE_IMPROVEMENTS.md P1）
 2. `settings.html` 整併進 admin
 3. `common.js` 等 shop.html 移植時依需求補
 
