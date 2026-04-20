@@ -145,6 +145,23 @@
         #toast { visibility: hidden; min-width: 200px; background-color: #2d3436; color: #fff; text-align: center; border-radius: 50px; padding: 12px 20px; position: fixed; z-index: 2000; left: 50%; transform: translateX(-50%); bottom: 30px; opacity: 0; transition: 0.3s; }
         #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
 
+        /* 設定 modal 分頁 */
+        .settings-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid #eee; flex-wrap: wrap; }
+        .settings-tab-btn { padding: 8px 14px; background: transparent; border: 0; border-bottom: 3px solid transparent; cursor: pointer; font-size: 14px; font-family: inherit; color: #666; font-weight: bold; }
+        .settings-tab-btn:hover { color: #333; }
+        .settings-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .settings-tab-pane { animation: fadeIn 0.15s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .loc-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+        .loc-table th { text-align: left; padding: 6px; color: #555; font-weight: normal; font-size: 12px; border-bottom: 1px solid #ddd; }
+        .loc-table td { padding: 5px; vertical-align: middle; }
+        .loc-table input { padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 100%; font-size: 13px; box-sizing: border-box; }
+        .loc-del { background: var(--danger); color: white; border: 0; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; }
+        .loc-del:hover { background: #c0392b; }
+        .loc-del:disabled { background: #ccc; cursor: not-allowed; }
+        .var-hint { background: #f4f6f8; padding: 10px; border-radius: 5px; font-size: 12px; color: #555; margin-bottom: 12px; line-height: 1.8; }
+        .var-hint code { background: white; padding: 2px 6px; border-radius: 3px; color: var(--primary); font-weight: bold; }
+
         /* 手機版緊湊顯示設定 */
         @media (max-width: 768px) {
             .sidebar { position: fixed; left: -320px; height: 100%; width: 280px; }
@@ -233,11 +250,7 @@
 
         <div class="input-group">
             <label>📍 服務地點</label>
-            <select id="input-location">
-                <option value="民權路">民權路</option>
-                <option value="莊二街">莊二街</option>
-                <option value="北新街">北新街</option>
-            </select>
+            <select id="input-location"></select>
         </div>
 
         <div class="input-group">
@@ -295,17 +308,72 @@
 <button id="scroll-top-btn" class="scroll-top-btn" onclick="scrollToTop()" title="回到頂端">⬆</button>
 
 <div id="settings-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 820px;">
         <div class="modal-header" style="display:flex; justify-content:space-between; padding-bottom:10px; border-bottom:1px solid #eee; margin-bottom:15px;">
-            <h3>⚙️ 編輯文案模板</h3>
+            <h3>⚙️ 地點 &amp; 文案模板</h3>
             <span class="close-modal" onclick="closeSettings()" style="cursor:pointer; font-size:24px;">×</span>
         </div>
-        <div class="input-group">
-            <label>⚠️ 頁尾警語</label>
-            <textarea id="setting-footer" rows="8"></textarea>
+
+        <div class="settings-tabs">
+            <button type="button" class="settings-tab-btn active" data-tab="locations" onclick="switchSettingsTab('locations')">📍 地點清單</button>
+            <button type="button" class="settings-tab-btn" data-tab="detailed" onclick="switchSettingsTab('detailed')">📋 詳細版模板</button>
+            <button type="button" class="settings-tab-btn" data-tab="concise" onclick="switchSettingsTab('concise')">📋 精簡版模板</button>
         </div>
-        <div style="text-align: right;">
-            <button onclick="saveSettings()" class="btn btn-save" style="width: auto; padding: 10px 20px;">儲存設定</button>
+
+        <!-- 地點清單 -->
+        <div class="settings-tab-pane" data-tab="locations">
+            <p style="color:#777; font-size:13px; margin:0 0 10px;">
+                地點會出現在：(1) 新增人員的下拉選單 (2) 左側名單小標籤（例如【民】）(3) 複製班表時的分店區塊。<br>
+                ⚠️ 有員工使用中的地點不能刪，要先把員工移到其他地點。
+            </p>
+            <table class="loc-table">
+                <thead>
+                    <tr><th style="width:38%;">完整名稱</th><th style="width:22%;">小標籤</th><th style="width:22%;">短名</th><th style="width:18%;">使用中</th></tr>
+                </thead>
+                <tbody id="locations-tbody"></tbody>
+            </table>
+            <button type="button" onclick="addLocationRow()" style="background:var(--success); color:white; border:0; padding:8px 14px; border-radius:5px; cursor:pointer; margin-top:10px; font-family:inherit; font-weight:bold;">+ 新增地點</button>
+        </div>
+
+        <!-- 詳細版模板 -->
+        <div class="settings-tab-pane" data-tab="detailed" style="display:none;">
+            <div class="var-hint">
+                <b>可用變數：</b>
+                <code>{date}</code> 今天 MM/DD
+                <code>{label}</code> 地點名
+                <code>{short}</code> 短名
+                <code>{badge}</code> 小標籤
+                <code>{count}</code> 人數
+            </div>
+            <div class="input-group"><label>頂部模板（可用：{date}）</label><textarea id="tpl-detailed-header" rows="5"></textarea></div>
+            <div class="input-group"><label>分店段開頭（可用：{label}, {short}, {badge}, {count}）</label><textarea id="tpl-detailed-sectionHead" rows="4"></textarea></div>
+            <div class="input-group"><label>分店間的分隔線</label><input type="text" id="tpl-detailed-sectionSep"></div>
+            <div class="input-group"><label>名單與「個人詳細」之間的分隔線</label><input type="text" id="tpl-detailed-detailsSep"></div>
+            <div class="input-group"><label>每個人詳細之間的分隔線</label><input type="text" id="tpl-detailed-personSep"></div>
+            <div class="input-group"><label>底部警語</label><textarea id="tpl-detailed-footer" rows="10"></textarea></div>
+            <button type="button" onclick="restoreDefaultTemplate('detailed')" style="background:#7f8c8d; color:white; border:0; padding:8px 14px; border-radius:5px; cursor:pointer; font-family:inherit;">↩️ 還原詳細版預設</button>
+        </div>
+
+        <!-- 精簡版模板 -->
+        <div class="settings-tab-pane" data-tab="concise" style="display:none;">
+            <div class="var-hint">
+                <b>可用變數：</b>
+                <code>{date}</code> 今天 MM/DD
+                <code>{label}</code> 地點名
+                <code>{short}</code> 短名
+                <code>{badge}</code> 小標籤
+                <code>{count}</code> 人數
+            </div>
+            <div class="input-group"><label>頂部模板（可用：{date}）</label><textarea id="tpl-concise-header" rows="4"></textarea></div>
+            <div class="input-group"><label>分店段開頭（可用：{label}, {short}, {badge}, {count}）</label><textarea id="tpl-concise-sectionHead" rows="2"></textarea></div>
+            <div class="input-group"><label>分店間的分隔線</label><input type="text" id="tpl-concise-sectionSep"></div>
+            <div class="input-group"><label>底部</label><textarea id="tpl-concise-footer" rows="4"></textarea></div>
+            <button type="button" onclick="restoreDefaultTemplate('concise')" style="background:#7f8c8d; color:white; border:0; padding:8px 14px; border-radius:5px; cursor:pointer; font-family:inherit;">↩️ 還原精簡版預設</button>
+        </div>
+
+        <div style="text-align: right; border-top:1px solid #eee; padding-top:15px; margin-top:20px;">
+            <button type="button" onclick="closeSettings()" style="background:#95a5a6; color:white; border:0; padding:10px 20px; border-radius:5px; cursor:pointer; font-family:inherit; margin-right:6px;">取消</button>
+            <button onclick="saveSettings()" class="btn btn-save" style="width: auto; padding: 10px 20px;">💾 儲存設定</button>
         </div>
     </div>
 </div>
@@ -335,7 +403,38 @@
     const DEFAULT_BODY = "身體密碼:\n溝通語言:英文\n上班時段【13.00-02.00】";
     const DEFAULT_PACKAGES = "方案選擇:\n🔅40💲2300_1s\n🔅60💲2700_1s\n🔅60💲3300_2s\n🔅120💲4800-3s";
     const DEFAULT_EXTRA = "加值服務項目A\n\n長鍾\n3+1\n5+3";
-    const DEFAULT_FOOTER_TEMPLATE = `***請顧客帶  整數進去 小姐小鈔不夠多***\n\n入珠客不告知洗澡\n遭小姐打槍 不退費 \n\n偷拍需刪除影or照片 \n罰 ( 紅包3,000 ) \n偷拔套 ( 紅包6,000 )\n\n洗澡後不退錢\n超過10分鐘禁止更換方案\n脫衣服打槍500 / 摸到身體+500 (脫衣服又亂摸=1,000)\n\n熟爆30,000＋當日營業額\n生爆40,000＋當日營業額\n生爆熟60,000＋當日營業額\n勞煩派工請勿亂搞`;
+
+    // ===== 地點清單預設（新租戶用） =====
+    const DEFAULT_LOCATIONS = {
+        '民權路': { label: '民權路', badge: '【民】', short: '民權', order: 0 },
+        '莊二街': { label: '莊二街', badge: '【莊】', short: '莊二', order: 1 },
+        '北新街': { label: '北新街', badge: '【北】', short: '北新', order: 2 }
+    };
+
+    // ===== 文案模板預設 =====
+    const DEFAULT_TEMPLATES = {
+        detailed: {
+            header: `{date}\n@all\n🔥紙房子🔥定點\n\n下單請敲 ➡️➡️紙房子1線-派工下單【東京】\n\n⭐️桃園區\n—————————————`,
+            sectionHead: `【 {label} 】\n❌❌❌不接生客\n需成功消費3次以上\n今日 ({count}) 位上班`,
+            sectionSep: `—————————————`,
+            detailsSep: `=======================`,
+            personSep: `————————`,
+            footer: `***請顧客帶  整數進去 小姐小鈔不夠多***\n\n入珠客不告知洗澡\n遭小姐打槍 不退費 \n\n偷拍需刪除影or照片 \n罰 ( 紅包3,000 ) \n偷拔套 ( 紅包6,000 )\n\n洗澡後不退錢\n超過10分鐘禁止更換方案\n脫衣服打槍500 / 摸到身體+500 (脫衣服又亂摸=1,000)\n\n熟爆30,000＋當日營業額\n生爆40,000＋當日營業額\n生爆熟60,000＋當日營業額\n勞煩派工請勿亂搞`
+        },
+        concise: {
+            header: `{date} ⚠️本日班表更新⚠️\n@All \n=================`,
+            sectionHead: `【 {short} 】今日 {count} 位上班`,
+            sectionSep: `=================`,
+            footer: `=================\n煩請各位老闆小幫手協助更新上架\n十分感謝！！祝生意興隆`
+        }
+    };
+
+    // 設定狀態（從 tenant Firebase /roster_settings 載入，沒資料用 defaults）
+    let settings = {
+        locations: JSON.parse(JSON.stringify(DEFAULT_LOCATIONS)),
+        templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES))
+    };
+    const settingsRef = ref(db, 'roster_settings');
 
     // Sortable 加入延遲判斷，避免手機滑動被誤判
     const el = document.getElementById('member-list');
@@ -365,9 +464,66 @@
         sortedCache = Object.keys(allMembers).map(id => ({
             id, ...allMembers[id]
         })).sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0));
-        filterList(); 
+        filterList();
         document.getElementById('loading-screen').classList.add('hidden');
     });
+
+    // ===== 地點 & 模板設定 live listener =====
+    onValue(settingsRef, (snap) => {
+        const s = snap.val();
+        if (!s) {
+            // 沒雲端設定：嘗試從舊 localStorage.myFooter 遷移
+            const legacyFooter = localStorage.getItem('myFooter');
+            settings = {
+                locations: JSON.parse(JSON.stringify(DEFAULT_LOCATIONS)),
+                templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES))
+            };
+            if (legacyFooter) settings.templates.detailed.footer = legacyFooter;
+        } else {
+            settings = {
+                locations: s.locations || JSON.parse(JSON.stringify(DEFAULT_LOCATIONS)),
+                templates: {
+                    detailed: { ...DEFAULT_TEMPLATES.detailed, ...((s.templates && s.templates.detailed) || {}) },
+                    concise: { ...DEFAULT_TEMPLATES.concise, ...((s.templates && s.templates.concise) || {}) }
+                }
+            };
+        }
+        rebuildLocationSelect();
+        if (Object.keys(allMembers).length) filterList();
+    });
+
+    // ===== helpers =====
+    function locationsSorted() {
+        return Object.entries(settings.locations)
+            .map(([code, v]) => ({ code, ...v }))
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+
+    function tplReplace(tpl, vars) {
+        return String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => vars[k] != null ? String(vars[k]) : m);
+    }
+
+    function rebuildLocationSelect() {
+        const sel = document.getElementById('input-location');
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = '';
+        const list = locationsSorted();
+        list.forEach(loc => {
+            const opt = document.createElement('option');
+            opt.value = loc.code;
+            opt.textContent = loc.label;
+            sel.appendChild(opt);
+        });
+        if (cur && list.find(l => l.code === cur)) sel.value = cur;
+        else if (list.length) sel.value = list[0].code;
+    }
+
+    function escapeAttr(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     window.switchView = (view) => {
         currentView = view;
@@ -401,12 +557,11 @@
             };
             const nameSpan = document.createElement('span');
             nameSpan.className = 'member-name';
-            
-            // 新增北新街的小標籤邏輯
-            let locBadge = '【民】';
-            if (member.location === '莊二街') locBadge = '【莊】';
-            if (member.location === '北新街') locBadge = '【北】';
-            
+
+            // 從設定動態取地點標籤
+            const loc = settings.locations[member.location];
+            const locBadge = (loc && loc.badge) ? loc.badge : '【?】';
+
             nameSpan.innerHTML = `<small style="color:#aaa">${locBadge}</small> ${member.name || '未命名'}`;
             li.onclick = () => loadMember(member.id);
 
@@ -460,15 +615,14 @@
     };
 
     function setupAutoSave() {
-        const inputs = document.querySelectorAll('input[type="text"], textarea, select');
+        // 只監聽 .container 內的表單（避免設定 modal 裡的 input 誤觸發儲存）
+        const inputs = document.querySelectorAll('.container input[type="text"], .container textarea, .container select');
         inputs.forEach(input => {
-            if(input.id !== 'search-input') {
-                input.addEventListener('input', () => {
-                    document.getElementById('save-status').innerText = "⏳ 編輯中...";
-                    clearTimeout(autoSaveTimer);
-                    autoSaveTimer = setTimeout(() => saveData(true), 1000);
-                });
-            }
+            input.addEventListener('input', () => {
+                document.getElementById('save-status').innerText = "⏳ 編輯中...";
+                clearTimeout(autoSaveTimer);
+                autoSaveTimer = setTimeout(() => saveData(true), 1000);
+            });
         });
     }
 
@@ -532,8 +686,9 @@
     window.loadMember = (id) => {
         currentId = id;
         const data = allMembers[id];
+        const firstLoc = (locationsSorted()[0] || {}).code || '';
         document.getElementById('input-name').value = data.name || '';
-        document.getElementById('input-location').value = data.location || '民權路';
+        document.getElementById('input-location').value = data.location || firstLoc;
         document.getElementById('input-features').value = data.features || '';
         document.getElementById('input-body').value = data.body || DEFAULT_BODY;
         document.getElementById('input-core-services').value = data.core || '';
@@ -547,8 +702,9 @@
 
     window.createNewMember = () => {
         currentId = null;
+        const firstLoc = (locationsSorted()[0] || {}).code || '';
         document.getElementById('input-name').value = '';
-        document.getElementById('input-location').value = '民權路';
+        document.getElementById('input-location').value = firstLoc;
         document.getElementById('input-features').value = '';
         document.getElementById('input-body').value = DEFAULT_BODY;
         document.getElementById('input-core-services').value = '';
@@ -669,95 +825,214 @@
         if (autoCopy) navigator.clipboard.writeText(output).then(() => showToast(`✅ 已複製：${currentData.name}`));
     };
 
+    function buildSectionsByLocation(t) {
+        const locs = locationsSorted();
+        const byLoc = new Map();
+        locs.forEach(l => byLoc.set(l.code, []));
+        const orphaned = [];
+        sortedCache.forEach(m => {
+            if (!selectedIds.has(m.id)) return;
+            if (m.status && m.status !== 'active') return;
+            if (byLoc.has(m.location)) byLoc.get(m.location).push(m);
+            else orphaned.push(m);
+        });
+        const sections = [];
+        let allInOrder = [];
+        locs.forEach(loc => {
+            const list = byLoc.get(loc.code) || [];
+            if (list.length === 0) return;
+            let s = tplReplace(t.sectionHead, {
+                label: loc.label, short: loc.short, badge: loc.badge, count: list.length
+            }) + '\n\n';
+            list.forEach(m => { s += `${m.name}\n\n`; });
+            sections.push(s);
+            allInOrder = allInOrder.concat(list);
+        });
+        if (orphaned.length > 0) {
+            let s = `【 其他 】共 ${orphaned.length} 位（地點已刪除）\n\n`;
+            orphaned.forEach(m => { s += `${m.name}\n\n`; });
+            sections.push(s);
+            allInOrder = allInOrder.concat(orphaned);
+        }
+        return { sections, allInOrder };
+    }
+
     window.copySelectedMembers = () => {
         if (selectedIds.size === 0) return alert('請先勾選名單！');
         const dateStr = `${new Date().getMonth() + 1}/${new Date().getDate()}`;
-        let headerText = `${dateStr}\n@all\n🔥紙房子🔥定點\n\n下單請敲 ➡️➡️紙房子1線-派工下單【東京】\n\n⭐️桃園區\n—————————————\n`;
-        
-        let listMinquan = [], listZhuang = [], listBeixin = [], fullDetailsText = ""; 
-        sortedCache.forEach((member) => {
-            if (selectedIds.has(member.id) && (member.status === 'active' || !member.status)) {
-                if (member.location === '莊二街') listZhuang.push(member); 
-                else if (member.location === '北新街') listBeixin.push(member); 
-                else listMinquan.push(member);
-            }
-        });
+        const t = settings.templates.detailed;
+        const { sections, allInOrder } = buildSectionsByLocation(t);
+        if (sections.length === 0) return alert('勾選的人員沒有在職的，或都沒分配地點');
 
-        let minquanSection = "";
-        if (listMinquan.length > 0) {
-            minquanSection = `【 民權路 】\n❌❌❌不接生客\n需成功消費3次以上\n今日 (${listMinquan.length}) 位上班\n\n`;
-            listMinquan.forEach(m => { minquanSection += `${m.name}\n\n`; });
-        }
-        
-        let zhuangSection = "";
-        if (listZhuang.length > 0) {
-            zhuangSection = (listMinquan.length > 0 ? "—————————————\n" : "") + `【 莊二街 】\n❌❌❌不接生客\n需成功消費3次以上\n今日 (${listZhuang.length}) 位上班\n\n`;
-            listZhuang.forEach(m => { zhuangSection += `${m.name}\n\n`; });
-        }
+        const header = tplReplace(t.header, { date: dateStr });
+        const sectionsJoined = sections.join((t.sectionSep || '') + '\n');
 
-        let beixinSection = "";
-        if (listBeixin.length > 0) {
-            beixinSection = ((listMinquan.length > 0 || listZhuang.length > 0) ? "—————————————\n" : "") + `【 北新街 】\n❌❌❌不接生客\n需成功消費3次以上\n今日 (${listBeixin.length}) 位上班\n\n`;
-            listBeixin.forEach(m => { beixinSection += `${m.name}\n\n`; });
-        }
+        let fullDetailsText = '';
+        allInOrder.forEach(m => { fullDetailsText += formatText(m) + `\n\n${t.personSep}\n\n`; });
 
-        listMinquan.concat(listZhuang).concat(listBeixin).forEach(m => { fullDetailsText += formatText(m) + `\n\n————————\n\n`; });
-        const finalOutput = headerText + minquanSection + zhuangSection + beixinSection + "=======================\n" + fullDetailsText + (localStorage.getItem('myFooter') || DEFAULT_FOOTER_TEMPLATE);
+        const finalOutput = header + '\n' + sectionsJoined + '\n' + (t.detailsSep || '') + '\n' + fullDetailsText + (t.footer || '');
         document.getElementById('output-area').value = finalOutput.trim();
         autoResizeOutput();
-        navigator.clipboard.writeText(finalOutput).then(() => showToast(`✅ 已複製公告`));
+        navigator.clipboard.writeText(finalOutput.trim()).then(() => showToast(`✅ 已複製公告`));
     };
 
     window.copyShortSchedule = () => {
         if (selectedIds.size === 0) return alert('請先勾選名單！');
-        
         const dateStr = `${new Date().getMonth() + 1}/${new Date().getDate()}`;
-        let headerText = `${dateStr} ⚠️本日班表更新⚠️\n@All \n=================\n`;
-        let footerText = `=================\n煩請各位老闆小幫手協助更新上架\n十分感謝！！祝生意興隆`;
-        
-        let listMinquan = [], listZhuang = [], listBeixin = [];
-        sortedCache.forEach((member) => {
-            if (selectedIds.has(member.id) && (member.status === 'active' || !member.status)) {
-                if (member.location === '莊二街') listZhuang.push(member); 
-                else if (member.location === '北新街') listBeixin.push(member); 
-                else listMinquan.push(member);
-            }
-        });
+        const t = settings.templates.concise;
+        const { sections } = buildSectionsByLocation(t);
+        if (sections.length === 0) return alert('勾選的人員沒有在職的，或都沒分配地點');
 
-        let minquanSection = "";
-        if (listMinquan.length > 0) {
-            minquanSection = `【 民權 】今日 ${listMinquan.length} 位上班\n\n`;
-            listMinquan.forEach(m => { minquanSection += `${m.name}\n\n`; });
-            minquanSection += `=================\n`;
-        }
-
-        let zhuangSection = "";
-        if (listZhuang.length > 0) {
-            zhuangSection = `【 莊二 】今日 ${listZhuang.length} 位上班\n\n`;
-            listZhuang.forEach(m => { zhuangSection += `${m.name}\n\n`; });
-            zhuangSection += `=================\n`; 
-        }
-
-        let beixinSection = "";
-        if (listBeixin.length > 0) {
-            beixinSection = `【 北新 】今日 ${listBeixin.length} 位上班\n\n`;
-            listBeixin.forEach(m => { beixinSection += `${m.name}\n\n`; });
-        }
-
-        const finalOutput = headerText + minquanSection + zhuangSection + beixinSection + footerText;
+        const header = tplReplace(t.header, { date: dateStr });
+        const sectionsJoined = sections.join((t.sectionSep || '') + '\n');
+        const finalOutput = header + '\n' + sectionsJoined + '\n' + (t.footer || '');
         document.getElementById('output-area').value = finalOutput.trim();
         autoResizeOutput();
-        navigator.clipboard.writeText(finalOutput).then(() => showToast(`✅ 已複製簡短班表`));
+        navigator.clipboard.writeText(finalOutput.trim()).then(() => showToast(`✅ 已複製簡短班表`));
     };
 
     window.openSettings = () => {
         document.getElementById('settings-modal').classList.add('show');
-        document.getElementById('setting-footer').value = localStorage.getItem('myFooter') || DEFAULT_FOOTER_TEMPLATE;
+        renderLocationsTable();
+        fillTemplateInputs();
+        switchSettingsTab('locations');
     };
     window.closeSettings = () => document.getElementById('settings-modal').classList.remove('show');
-    window.saveSettings = () => {
-        localStorage.setItem('myFooter', document.getElementById('setting-footer').value);
-        showToast('✅ 設定已儲存'); window.closeSettings();
+
+    window.switchSettingsTab = (tab) => {
+        document.querySelectorAll('.settings-tab-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.tab === tab);
+        });
+        document.querySelectorAll('.settings-tab-pane').forEach(p => {
+            p.style.display = p.dataset.tab === tab ? 'block' : 'none';
+        });
+    };
+
+    function memberCountByLocation() {
+        const count = {};
+        sortedCache.forEach(m => {
+            if (m.status && m.status !== 'active') return;
+            if (!m.location) return;
+            count[m.location] = (count[m.location] || 0) + 1;
+        });
+        return count;
+    }
+
+    function renderLocationsTable() {
+        const tbody = document.getElementById('locations-tbody');
+        tbody.innerHTML = '';
+        const usage = memberCountByLocation();
+        locationsSorted().forEach(loc => {
+            const tr = document.createElement('tr');
+            tr.className = 'loc-row';
+            tr.setAttribute('data-code', loc.code);
+            const used = usage[loc.code] || 0;
+            tr.innerHTML =
+                `<td><input type="text" class="loc-label" value="${escapeAttr(loc.label)}"></td>` +
+                `<td><input type="text" class="loc-badge" value="${escapeAttr(loc.badge)}"></td>` +
+                `<td><input type="text" class="loc-short" value="${escapeAttr(loc.short)}"></td>` +
+                `<td style="white-space:nowrap;">` +
+                    `<span style="color:${used>0?'#e67e22':'#999'}; font-size:12px; margin-right:6px;">${used>0?`${used} 人`:'空'}</span>` +
+                    `<button class="loc-del" ${used>0?'disabled title="有員工使用中，不能刪"':'title="刪除此地點"'}>🗑️</button>` +
+                `</td>`;
+            const delBtn = tr.querySelector('.loc-del');
+            if (used === 0) delBtn.onclick = () => tr.remove();
+            tbody.appendChild(tr);
+        });
+    }
+
+    window.addLocationRow = () => {
+        const tbody = document.getElementById('locations-tbody');
+        const tr = document.createElement('tr');
+        tr.className = 'loc-row';
+        tr.setAttribute('data-code', ''); // 新增：code 會在儲存時用 label 產生
+        tr.innerHTML =
+            `<td><input type="text" class="loc-label" placeholder="例如 中正路"></td>` +
+            `<td><input type="text" class="loc-badge" placeholder="例如 【中】"></td>` +
+            `<td><input type="text" class="loc-short" placeholder="例如 中正"></td>` +
+            `<td><button class="loc-del" title="移除">🗑️</button></td>`;
+        tr.querySelector('.loc-del').onclick = () => tr.remove();
+        tbody.appendChild(tr);
+        tr.querySelector('.loc-label').focus();
+    };
+
+    function fillTemplateInputs() {
+        const t = settings.templates;
+        document.getElementById('tpl-detailed-header').value = t.detailed.header;
+        document.getElementById('tpl-detailed-sectionHead').value = t.detailed.sectionHead;
+        document.getElementById('tpl-detailed-sectionSep').value = t.detailed.sectionSep;
+        document.getElementById('tpl-detailed-detailsSep').value = t.detailed.detailsSep;
+        document.getElementById('tpl-detailed-personSep').value = t.detailed.personSep;
+        document.getElementById('tpl-detailed-footer').value = t.detailed.footer;
+        document.getElementById('tpl-concise-header').value = t.concise.header;
+        document.getElementById('tpl-concise-sectionHead').value = t.concise.sectionHead;
+        document.getElementById('tpl-concise-sectionSep').value = t.concise.sectionSep;
+        document.getElementById('tpl-concise-footer').value = t.concise.footer;
+    }
+
+    window.restoreDefaultTemplate = (which) => {
+        const label = which === 'detailed' ? '詳細版' : '精簡版';
+        if (!confirm(`確定要還原${label}預設模板？\n（目前未儲存的編輯會被覆蓋）`)) return;
+        const d = DEFAULT_TEMPLATES[which];
+        if (which === 'detailed') {
+            document.getElementById('tpl-detailed-header').value = d.header;
+            document.getElementById('tpl-detailed-sectionHead').value = d.sectionHead;
+            document.getElementById('tpl-detailed-sectionSep').value = d.sectionSep;
+            document.getElementById('tpl-detailed-detailsSep').value = d.detailsSep;
+            document.getElementById('tpl-detailed-personSep').value = d.personSep;
+            document.getElementById('tpl-detailed-footer').value = d.footer;
+        } else {
+            document.getElementById('tpl-concise-header').value = d.header;
+            document.getElementById('tpl-concise-sectionHead').value = d.sectionHead;
+            document.getElementById('tpl-concise-sectionSep').value = d.sectionSep;
+            document.getElementById('tpl-concise-footer').value = d.footer;
+        }
+    };
+
+    window.saveSettings = async () => {
+        // 收地點
+        const rows = document.querySelectorAll('#locations-tbody .loc-row');
+        const newLocations = {};
+        const seenCode = new Set();
+        let order = 0;
+        for (const tr of rows) {
+            const label = tr.querySelector('.loc-label').value.trim();
+            const badge = tr.querySelector('.loc-badge').value.trim();
+            const short = tr.querySelector('.loc-short').value.trim();
+            if (!label) continue;
+            const existingCode = tr.getAttribute('data-code') || '';
+            const code = existingCode || label;
+            if (seenCode.has(code)) { alert(`地點「${code}」重複，請修改名稱`); return; }
+            seenCode.add(code);
+            newLocations[code] = { label, badge, short, order: order++ };
+        }
+        if (Object.keys(newLocations).length === 0) { alert('至少需要一個地點'); return; }
+
+        // 收模板
+        const newTemplates = {
+            detailed: {
+                header: document.getElementById('tpl-detailed-header').value,
+                sectionHead: document.getElementById('tpl-detailed-sectionHead').value,
+                sectionSep: document.getElementById('tpl-detailed-sectionSep').value,
+                detailsSep: document.getElementById('tpl-detailed-detailsSep').value,
+                personSep: document.getElementById('tpl-detailed-personSep').value,
+                footer: document.getElementById('tpl-detailed-footer').value
+            },
+            concise: {
+                header: document.getElementById('tpl-concise-header').value,
+                sectionHead: document.getElementById('tpl-concise-sectionHead').value,
+                sectionSep: document.getElementById('tpl-concise-sectionSep').value,
+                footer: document.getElementById('tpl-concise-footer').value
+            }
+        };
+
+        try {
+            await set(settingsRef, { locations: newLocations, templates: newTemplates });
+            showToast('✅ 設定已儲存');
+            closeSettings();
+        } catch (err) {
+            alert('儲存失敗：' + (err.message || err));
+        }
     };
     // LifeOS 統一版：module + await bootTenant 可能跑完時 load 事件早已觸發
     // 直接呼叫即可（module 自帶 defer，DOM 已 ready）
