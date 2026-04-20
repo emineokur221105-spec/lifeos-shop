@@ -460,12 +460,16 @@
 
             const renderList = (items, colorClass) => {
                 if(items.length === 0) return `<div class="text-xs text-slate-600 py-2 text-center">無項目</div>`;
-                return items.map(item => `
+                return items.map(item => {
+                    const amt = parseFloat(item.amount) || 0;
+                    const displayName = item.name || '(未命名)';
+                    return `
                     <div class="detail-item">
-                        <span class="truncate mr-2 text-slate-400">${item.name}</span>
-                        <span class="font-mono font-bold ${colorClass}">$${parseInt(item.amount).toLocaleString()}</span>
+                        <span class="truncate mr-2 text-slate-400">${displayName}</span>
+                        <span class="font-mono font-bold ${colorClass}">$${amt.toLocaleString()}</span>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             };
 
             const grandTotal = dividend + teamPaidTotal + companyPaidTotal;
