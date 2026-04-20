@@ -15,9 +15,11 @@
   - 預設改成開著，緊急關閉仍可 `MINIFY_HTML_INLINE=0 node build.js`
   - 全部 6 個 HTML 混淆成功，關鍵屬性名（TENANT_FIREBASE_CONFIG、tenant-ready、system_config 等）都保留
   - 縮減效果：settings.html 縮 34%
-- **[P2] Admin 密碼升級**
-  - 目前 `?admin=0308` 是明碼 URL 參數，任何人看到網址就知道
-  - 未來改：登入頁 + Firebase Auth（Email/Password 或 Google 登入）+ 真正的權限檢查
+- **[x] ~~[P2] Admin 密碼升級~~** ✅ 2026-04-20 深夜
+  - 舊 `?admin=0308` 廢除，改長隨機字串 + SHA-256 hash 比對
+  - `index.html` 完全移除 admin 痕跡（看原始碼找不到後台入口）
+  - 新網址存 `LOCAL_SECRETS.md`（gitignore）
+  - 後續仍可再升級到 Firebase Auth 登入頁（P3，有真帳號系統需求再做）
 - **[P2] DevTools 尺寸偵測不夠精準**
   - 現在用 `outerWidth - innerWidth > 160` 偵測，DevTools 停靠在側邊才準，上下停靠或 undocked 偵測不到
   - 未來改：多種偵測並用（performance timing、console.log hook 等）

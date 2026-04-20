@@ -84,7 +84,7 @@
   - `function changeWeek` → `window.changeWeek = function`（module 作用域下 onclick 要走 window）
   - index.html 的 weekly 按鈕解鎖
 - [x] `shop.html`（最大、最核心）2026-04-20
-  - [x] 採方案 C：整頁 + shop_data/*.js 搬過來保留 v8 compat（之後再逐檔改 v11 modular → FUTURE_IMPROVEMENTS P1）
+  - [x] ~~方案 C：保留 v8 compat~~ → 深夜已改 full rewrite（見下方「深夜」區塊），shop_data/*.js 已全面 v11 modular
   - [x] head 保留 Firebase v8 compat SDK（8.10.1）+ html2canvas
   - [x] 頂部加 `<script type="module">`：跑 bootTenant（驗白名單 + 載租戶 config）→ 塞 `window.TENANT_FIREBASE_CONFIG` → 動態按序載入 6 個 shop_data JS
   - [x] `shop/shop_data/config.js` 改：刪 DEFAULT_FIREBASE_CONFIG + localStorage fallback，改讀 `window.TENANT_FIREBASE_CONFIG`（沒有就報錯）
@@ -118,13 +118,31 @@
 
 ## 📝 當前進度
 
-**Phase 3 進行中（自我健檢完成，等 Raymond 驗收）**
-最後更新：2026-04-20 Asia/Taipei
+**Phase 3 進行中（v11 統一 + admin 密碼升級 都做完了，等 kabe 實際驗收）**
+最後更新：2026-04-20 深夜 Asia/Taipei
 
-**剛完成（2026-04-20 晚）：Claude 自我健檢**
-- 掃過全部 src/ 檔案，確認所有 `bootTenant` 整合點都正確
-- 修 2 個 race condition bug（見 Phase 3 區塊）
-- 下次開工請先請 Raymond 實際點一輪網站驗收
+**最新狀態（以 git log 為準）：**
+- `12e9554` admin 入口改 SHA-256 驗證 + index 完全移除 admin 痕跡 ← **最新**
+- `e6a2a1c` shop_data 整組升 v11 modular（full rewrite，已 push 線上）
+- `005ded9` / `5b53b37` 前一輪的 v8 compat shim 版 + build.js terser 污染修復
+- kabe 已測線上網址能動（2026-04-20 晚）
+
+**剛完成（2026-04-20 深夜 2）：index.html 加入口 UX**
+- 沒 `?t=` 時：若 `localStorage.lifeos_last_tenant` 有值 → 自動 `location.replace('?t=<saved>')`
+- 沒記住：顯示輸入框（預填上次代號，沒有就空的），按「進入」redirect
+- 成功 bootTenant 才寫 localStorage（避免壞代號被記住、害下次一直重跳錯誤頁）
+- 載入失敗時顯示錯誤 + 「🔄 換別的租戶」按鈕 → 清 localStorage + 跳 `?pick` 強制輸入框
+- `?pick` 參數可繞過自動跳轉，正常切租戶用
+- kabe 驗收流程中期需求：不想每次手動打網址
+- 驗證待 deploy 上線後測
+
+**剛完成（2026-04-20 深夜）：admin 密碼升級**
+- 舊 `?admin=0308` 廢除（太好猜），改長隨機字串
+- 原始碼只存 SHA-256 hash，輸入時算 hash 比對
+- `index.html` 完全移除 admin 分支：不 redirect、無 `ADMIN_KEY_HASH`、不提 `?admin=` 字樣。搜 index 原始碼看不出有後台入口
+- `admin.html` 自己驗證，要直接輸入正確網址才能進
+- 新 admin URL 存 `LOCAL_SECRETS.md`（gitignore）
+- 對應 FUTURE_IMPROVEMENTS `[P2] Admin 密碼升級` 可劃掉
 
 **之前完成（2026-04-20）：**
 - `src/admin.html`：Admin 後台

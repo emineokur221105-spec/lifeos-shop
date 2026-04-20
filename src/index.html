@@ -73,6 +73,43 @@
   .btn-weekly { background: linear-gradient(135deg, #d35400, #f39c12); }
   .btn-roster { background: linear-gradient(135deg, #8e44ad, #9b59b6); }
   .footer { margin-top: 24px; font-size: 12px; color: #666; }
+  .entry-form { display: flex; gap: 8px; margin-top: 8px; }
+  .entry-form input {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #222;
+    color: #eee;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+  }
+  .entry-form input:focus { border-color: #3498db; }
+  .entry-form button {
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 0;
+    background: #27ae60;
+    color: #fff;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .entry-form button:hover { filter: brightness(1.1); }
+  .switch-tenant {
+    margin-top: 12px;
+    background: transparent;
+    border: 1px solid #444;
+    color: #999;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .switch-tenant:hover { border-color: #666; color: #ccc; }
   .spinner {
     display: inline-block;
     width: 14px; height: 14px;
@@ -94,6 +131,7 @@
 </div>
 
 <script type="module">
+  const LAST_TENANT_KEY = 'lifeos_last_tenant';
   const app = document.getElementById('app');
   const setStatus = (html, kind) => {
     app.innerHTML = '<div class="msg ' + (kind || 'info') + '">' + html + '</div>';
@@ -101,6 +139,27 @@
 
   const params = new URLSearchParams(window.location.search);
   const tenantCode = params.get('t');
+  const forceInput = params.has('pick'); // ?pick 可強制顯示輸入框（切租戶用）
+
+  const showEntryForm = (prefill) => {
+    app.innerHTML =
+      '<div class="msg info">' +
+        '請輸入租戶代號進入系統' +
+        '<form class="entry-form" id="entryForm">' +
+          '<input id="tenantInput" type="text" placeholder="例如 demo-qinre-main" value="' + (prefill || '') + '" autocomplete="off" />' +
+          '<button type="submit">進入</button>' +
+        '</form>' +
+      '</div>';
+    const form = document.getElementById('entryForm');
+    const input = document.getElementById('tenantInput');
+    input.focus();
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = input.value.trim();
+      if (!code) return;
+      location.href = '?t=' + encodeURIComponent(code);
+    });
+  };
 
   if (tenantCode) {
     try {
@@ -108,7 +167,9 @@
       const { bootTenant } = await import('./core/tenant-boot.js');
       const tenant = await bootTenant(msg => setStatus('<span class="spinner"></span>' + msg, 'loading'));
 
-      // 載完後渲染功能選單
+      // 成功載入才存，避免壞代號被記住
+      try { localStorage.setItem(LAST_TENANT_KEY, tenantCode); } catch {}
+
       const q = '?t=' + encodeURIComponent(tenantCode);
       app.innerHTML =
         '<div class="tenant-tag">🏷 ' + (tenant.name ? (tenant.name + '（' + tenant.code + '）') : tenant.code) + '</div>' +
@@ -119,17 +180,24 @@
         '<div class="footer">資料已連接租戶 Firebase</div>';
     } catch (err) {
       console.error('[LifeOS] 啟動失敗', err);
-      setStatus('❌ ' + (err && err.message ? err.message : '啟動失敗'), 'err');
+      app.innerHTML =
+        '<div class="msg err">❌ ' + (err && err.message ? err.message : '啟動失敗') + '</div>' +
+        '<button class="switch-tenant" id="switchBtn">🔄 換別的租戶</button>';
+      document.getElementById('switchBtn').addEventListener('click', () => {
+        try { localStorage.removeItem(LAST_TENANT_KEY); } catch {}
+        location.href = '?pick';
+      });
     }
   }
   else {
-    setStatus(
-      '系統需要從租戶連結進入。' +
-      '<div class="hint">' +
-      '租客入口：<code>?t=&lt;代號&gt;</code>' +
-      '</div>',
-      'info'
-    );
+    // 沒帶 ?t=：若上次有記住且沒強制 ?pick，自動跳
+    let saved = null;
+    try { saved = localStorage.getItem(LAST_TENANT_KEY); } catch {}
+    if (saved && !forceInput) {
+      location.replace('?t=' + encodeURIComponent(saved));
+    } else {
+      showEntryForm(saved || '');
+    }
   }
 </script>
 </body>
