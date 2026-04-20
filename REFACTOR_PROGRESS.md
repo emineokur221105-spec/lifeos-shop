@@ -127,6 +127,23 @@
 - `005ded9` / `5b53b37` 前一輪的 v8 compat shim 版 + build.js terser 污染修復
 - kabe 已測線上網址能動（2026-04-20 晚）
 
+**剛完成（2026-04-20 深夜 3）：roster.html 三大加強（kabe 驗收中臨時插隊）**
+- **F1 永久刪除**：離職名單每行加 🗑️ 深紅按鈕，二次確認 → `remove()` 徹底移除
+  （在職看不到刪除鈕，防誤刪；離職 = 垃圾桶、永久刪除 = 倒垃圾）
+- **F3 UI 加強**：
+  - `#output-area` 一鏡到底（auto-resize 依內容撐開，不再有內部捲軸）
+  - 預覽字級 4 段（小/中/大/特大），存 lsKey
+  - 整頁縮放 select 50%~100%（body.style.zoom），存 lsKey
+  - 右下浮動 ⬆ 回頂按鈕，main-content 捲過 300px 才顯示
+- **F2 多租戶化**（最大）：把 for 陳老闆公司寫死的東西全拉出來可編輯
+  - 地點清單 CRUD（原寫死民權路/莊二街/北新街）
+  - 詳細版 + 精簡版模板 12 個欄位全可編輯（header/sectionHead/sep/footer 等）
+  - 變數支援：`{date} {label} {short} {badge} {count}`
+  - 存在租戶 Firebase `/roster_settings`，舊 localStorage.myFooter 自動遷移
+  - 設定 modal 改 3 tab：📍 地點 / 📋 詳細版 / 📋 精簡版
+  - 有員工使用中的地點不能刪；員工的地點被刪則歸「其他」組
+- 3 個 commit（bb273aa / 2c2b3fa / 9a74bde）分開，萬一出事可單獨 rollback
+
 **剛完成（2026-04-20 深夜 2）：index.html 加入口 UX**
 - 沒 `?t=` 時：若 `localStorage.lifeos_last_tenant` 有值 → 自動 `location.replace('?t=<saved>')`
 - 沒記住：顯示輸入框（預填上次代號，沒有就空的），按「進入」redirect
