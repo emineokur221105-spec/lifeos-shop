@@ -297,7 +297,7 @@ export function updateTotalsFromDOM() {
 
   const dateStr = document.getElementById('dateInput').value;
   const textDisplay = document.getElementById('aunt_text_display');
-  if (textDisplay) textDisplay.innerText = auntTextString.trim() ? `${dateStr}\n${auntTextString.trim()}` : '無資料';
+  if (textDisplay) textDisplay.innerText = auntTextString.trim() ? `${dateStr} ${auntTextString.trim()}` : '無資料';
 
   currentDailySummaryData = {
     dateName: dateStr,

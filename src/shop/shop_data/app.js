@@ -1095,11 +1095,23 @@ function resetFromModal() {
   showToast('🔄 當日房間資訊已徹底重置');
 }
 
-// 截圖下載（保留舊功能）
+// 截圖下載：只保留 summary-area（總營收/阿姨帳/經紀/盈餘/工數）+ 所有人員卡片
 function downloadScreenshot() {
   if (typeof html2canvas !== 'function') { alert('html2canvas 尚未載入'); return; }
   const target = document.getElementById('view-settle');
   if (!target) return;
+
+  // 截圖前暫時隱藏不要的區塊
+  const toHide = [];
+  target.querySelectorAll('.settle-header-bar, .config-section, .no-print').forEach(el => toHide.push(el));
+  // 隱藏按鈕列（region tabs + 下載/複製 Excel 按鈕那一排）
+  const regionTabs = document.getElementById('settleRegionTabs');
+  if (regionTabs && regionTabs.parentElement && target.contains(regionTabs.parentElement)) {
+    toHide.push(regionTabs.parentElement);
+  }
+  const saved = toHide.map(el => ({ el, display: el.style.display }));
+  toHide.forEach(el => { el.style.display = 'none'; });
+
   showToast('⏳ 截圖處理中...');
   html2canvas(target, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
     const link = document.createElement('a');
@@ -1110,6 +1122,8 @@ function downloadScreenshot() {
   }).catch(err => {
     console.error(err);
     showToast('❌ 截圖失敗');
+  }).finally(() => {
+    saved.forEach(s => { s.el.style.display = s.display; });
   });
 }
 
