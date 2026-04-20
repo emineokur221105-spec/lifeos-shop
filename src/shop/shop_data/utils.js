@@ -135,9 +135,14 @@ export function getGlobalPricingTables() {
   return { globalCommTable, globalCostTable, globalWorkTable };
 }
 
-// 取得今天 MM/DD 字串（與舊版 getTodayDateStr 同義）
+// 取得「營業日」今天 MM/DD 字串
+// 上班 13:00~03:00 跨日：凌晨 05:00 前視為前一天（還在做前一天的生意）
+const BUSINESS_DAY_CUTOFF_HOUR = 5;
 export function getTodayDateStr() {
   const d = new Date();
+  if (d.getHours() < BUSINESS_DAY_CUTOFF_HOUR) {
+    d.setDate(d.getDate() - 1);
+  }
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${m}/${day}`;
