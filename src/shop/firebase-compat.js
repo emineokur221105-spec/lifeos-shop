@@ -6,21 +6,16 @@
 //      const db = initShopDb(tenantFirebaseConfig);
 //      // 之後 db.ref('path').once('value').then(snap => snap.val()) 都照 v8 寫法
 
-import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
 import {
-  getDatabase,
   ref as mRef,
   get as mGet,
   set as mSet,
   update as mUpdate,
   remove as mRemove,
   push as mPush,
-  child as mChild,
   onValue as mOnValue,
   off as mOff
 } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js';
-
-const SHOP_APP_NAME = 'shopTenant';
 
 function makeSnap(modularSnap) {
   return {
@@ -116,24 +111,17 @@ function makeRef(database, path) {
 }
 
 /**
- * 初始化租戶 Firebase app（命名 app 避免與主 Firebase 衝突），回傳 v8 風格的 db。
- * @param {object} firebaseConfig
+ * 拿 bootTenant() 已初始化好的 v11 modular Database 物件，包成 v8 風格 db。
+ * 不要在這裡再 initializeApp，避免一個 databaseURL 建兩個 app 導致 Firebase 警告。
+ * @param {import('firebase/database').Database} modularDatabase
  * @returns {{ref: (path:string)=>object}}
  */
-export function initShopDb(firebaseConfig) {
-  if (!firebaseConfig || !firebaseConfig.databaseURL) {
-    throw new Error('❌ initShopDb: firebaseConfig 缺少 databaseURL');
+export function wrapShopDb(modularDatabase) {
+  if (!modularDatabase) {
+    throw new Error('❌ wrapShopDb: modularDatabase 為空');
   }
-  let app;
-  try {
-    app = getApp(SHOP_APP_NAME);
-  } catch (_) {
-    app = initializeApp(firebaseConfig, SHOP_APP_NAME);
-  }
-  const database = getDatabase(app);
-
   return {
-    ref(path) { return makeRef(database, path); },
-    _raw: { app, database }
+    ref(path) { return makeRef(modularDatabase, path); },
+    _raw: { database: modularDatabase }
   };
 }
