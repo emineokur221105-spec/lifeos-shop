@@ -486,7 +486,7 @@
                     </div>
                     <div class="flex justify-between items-end">
                         <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">分紅 (Dividend)</span>
-                        <span class="font-mono text-xl font-bold text-slate-300">$${dividend.toLocaleString()}</span>
+                        <span id="sh-dividend-${idx}" class="font-mono text-xl font-bold text-slate-300">$${dividend.toLocaleString()}</span>
                     </div>
                 </div>
 
@@ -494,7 +494,7 @@
                     <div>
                         <div class="flex justify-between items-center mb-2">
                             <span class="text-[10px] font-bold text-orange-400 bg-orange-950/30 border border-orange-900/50 px-2 py-0.5 rounded-full">團隊墊付</span>
-                            <span class="text-xs font-mono font-bold text-orange-400">$${teamPaidTotal.toLocaleString()}</span>
+                            <span id="sh-team-total-${idx}" class="text-xs font-mono font-bold text-orange-400">$${teamPaidTotal.toLocaleString()}</span>
                         </div>
                         <div class="pl-1">
                             ${renderList(teamPaidItems, 'text-orange-400')}
@@ -504,7 +504,7 @@
                     <div>
                         <div class="flex justify-between items-center mb-2">
                             <span class="text-[10px] font-bold text-indigo-400 bg-indigo-950/30 border border-indigo-900/50 px-2 py-0.5 rounded-full">公司代墊</span>
-                            <span class="text-xs font-mono font-bold text-indigo-400">$${companyPaidTotal.toLocaleString()}</span>
+                            <span id="sh-company-total-${idx}" class="text-xs font-mono font-bold text-indigo-400">$${companyPaidTotal.toLocaleString()}</span>
                         </div>
                         <div class="pl-1">
                             ${renderList(companyPaidItems, 'text-indigo-400')}
@@ -514,11 +514,43 @@
 
                 <div class="p-4 bg-slate-950 rounded-b-xl flex justify-between items-center mt-auto border-t border-slate-800">
                     <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">實領總額</span>
-                    <span class="font-mono text-xl font-bold text-yellow-400">$${grandTotal.toLocaleString()}</span>
+                    <span id="sh-grand-${idx}" class="font-mono text-xl font-bold text-yellow-400">$${grandTotal.toLocaleString()}</span>
                 </div>
             </div>
             `;
         }).join('');
+    }
+
+    // 只更新顯示用的數字，不重建 DOM（避免使用者正在輸入時 input 被 destroy 失焦）
+    function updateDerivedNumbers() {
+      const incVal = parseFloat(document.getElementById('income').value) || 0;
+      income = incVal;
+      let totalTeamExpense = 0;
+      expenses.forEach(exp => { if (exp.type === 'team') totalTeamExpense += (parseFloat(exp.amount) || 0); });
+      const netProfit = incVal - totalTeamExpense;
+
+      document.getElementById('total-team-expenses').innerText = totalTeamExpense.toLocaleString();
+      document.getElementById('formula-income').innerText = incVal.toLocaleString();
+      document.getElementById('formula-exp').innerText = totalTeamExpense.toLocaleString();
+      document.getElementById('formula-net').innerText = netProfit.toLocaleString();
+
+      shareholders.forEach((sh, idx) => {
+        const dividend = Math.floor(netProfit * (sh.percent / 100));
+        const teamPaidTotal = expenses.filter(e => e.paidBy === sh.name && e.type === 'team').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        const companyPaidTotal = expenses.filter(e => e.paidBy === sh.name && e.type === 'company').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        const grandTotal = dividend + teamPaidTotal + companyPaidTotal;
+
+        const d = document.getElementById(`sh-dividend-${idx}`);
+        const t = document.getElementById(`sh-team-total-${idx}`);
+        const c = document.getElementById(`sh-company-total-${idx}`);
+        const g = document.getElementById(`sh-grand-${idx}`);
+        if (d) d.innerText = '$' + dividend.toLocaleString();
+        if (t) t.innerText = '$' + teamPaidTotal.toLocaleString();
+        if (c) c.innerText = '$' + companyPaidTotal.toLocaleString();
+        if (g) g.innerText = '$' + grandTotal.toLocaleString();
+      });
+
+      checkPercent();
     }
 
     function checkPercent() {
@@ -543,10 +575,20 @@
     };
 
     window.renderAll = function() { renderExpenses(); window.calculate(); }
-    window.updateExp = (i, k, v) => { expenses[i][k] = v; if(k === 'type' || k === 'paidBy') renderExpenses(); window.calculate(); window.saveData(); };
+    window.updateExp = (i, k, v) => {
+      expenses[i][k] = v;
+      if (k === 'type' || k === 'paidBy') { renderExpenses(); window.calculate(); }
+      else { updateDerivedNumbers(); }   // amount/name 變動：不重建卡片
+      window.saveData();
+    };
     window.addExpense = () => { expenses.push({ type: 'team', name: '', amount: '', paidBy: '' }); renderExpenses(); window.saveData(); };
     window.removeExp = (i) => { expenses.splice(i, 1); renderExpenses(); window.calculate(); window.saveData(); };
-    window.updateSh = (i, k, v) => { shareholders[i][k] = k === 'percent' ? parseFloat(v) || 0 : v; if(k === 'name') renderExpenses(); window.calculate(); window.saveData(); };
+    window.updateSh = (i, k, v) => {
+      shareholders[i][k] = k === 'percent' ? parseFloat(v) || 0 : v;
+      if (k === 'name') { renderExpenses(); window.calculate(); }   // 改名要重建付款人下拉 + 卡片顯示
+      else { updateDerivedNumbers(); }                               // percent 只更新數字、不重建 input
+      window.saveData();
+    };
     window.addShareholder = () => { shareholders.push({ name: 'New', percent: 0 }); window.renderAll(); window.saveData(); };
     window.removeSh = (i) => { if(confirm('刪除?')) { shareholders.splice(i, 1); window.renderAll(); window.saveData(); } };
 
