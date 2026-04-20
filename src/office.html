@@ -10,8 +10,8 @@
 
   <style>
     /* === 深色模式全域設定 === */
-    body { 
-      font-family: 'Inter', 'Noto Sans TC', sans-serif; 
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
       background-color: #0f172a; /* 深空灰背景 */
       color: #e2e8f0; /* 淺灰文字 */
     }
@@ -19,7 +19,7 @@
 
     /* === 輸入框 (深色版) === */
     .input-box {
-      width: 100%; 
+      width: 100%;
       background-color: #1e293b; /* 鐵灰底 */
       border: 1px solid #334155; /* 深框 */
       border-radius: 6px;
@@ -31,9 +31,9 @@
     .input-box:hover {
       background-color: #334155;
     }
-    .input-box:focus { 
-      background-color: #0f172a; 
-      border-color: #3b82f6; 
+    .input-box:focus {
+      background-color: #0f172a;
+      border-color: #3b82f6;
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
       outline: none;
     }
@@ -45,9 +45,9 @@
       font-weight: 700;
       font-family: 'Roboto Mono', monospace;
       color: #38bdf8; /* 亮藍色數字 */
-      background-color: #0f172a; 
+      background-color: #0f172a;
     }
-    
+
     /* === 卡片樣式 (深色懸浮) === */
     .expense-row {
       display: grid;
@@ -65,12 +65,12 @@
       background-color: #263345;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
     }
-    
+
     /* 🎨 顏色主題 (螢光感) */
     /* 團隊支出 - 亮橘 */
-    .row-team { border-left-color: #f97316; } 
+    .row-team { border-left-color: #f97316; }
     .tag-team { background-color: #431407; color: #fdba74; border: 1px solid #7c2d12; }
-    
+
     /* 公司代墊 - 亮靛藍 */
     .row-company { border-left-color: #818cf8; }
     .tag-company { background-color: #1e1b4b; color: #a5b4fc; border: 1px solid #3730a3; }
@@ -85,7 +85,7 @@
     /* 按鈕與小元件 */
     .btn-move { color: #475569; padding: 4px; border-radius: 4px; transition: 0.2s; }
     .btn-move:hover { color: #94a3b8; background-color: #334155; }
-    
+
     .status-dot { height: 6px; width: 6px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .status-online { background-color: #34d399; box-shadow: 0 0 8px #34d399; } /* 螢光綠 */
     .status-syncing { background-color: #fbbf24; animation: pulse 1s infinite; }
@@ -97,11 +97,32 @@
         padding: 8px 0; border-bottom: 1px dashed #334155; font-size: 0.85rem; color: #94a3b8;
     }
     .detail-item:last-child { border-bottom: none; }
-    
+
     /* 主卡片容器修正 */
     #report-card {
         background-color: #1e293b;
         border-color: #334155;
+    }
+
+    /* === 週選擇器 === */
+    .week-bar { display: inline-flex; align-items: center; gap: 6px; }
+    .week-bar .btn-nav {
+      background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+      width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+      font-size: 14px; font-weight: bold; padding: 0;
+      transition: 0.2s;
+    }
+    .week-bar .btn-nav:hover { background: #334155; color: #f8fafc; border-color: #475569; }
+    .week-bar input[type="week"] {
+      background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
+      padding: 4px 8px; border-radius: 6px; font-size: 12px;
+      font-family: 'Roboto Mono', monospace; outline: none;
+      color-scheme: dark;
+    }
+    .week-bar input[type="week"]:focus { border-color: #3b82f6; }
+    .week-range {
+      font-family: 'Roboto Mono', monospace; color: #64748b; font-size: 11px;
+      margin-left: 8px; letter-spacing: 0.5px;
     }
   </style>
 </head>
@@ -129,19 +150,24 @@
       <div class="flex flex-col md:flex-row justify-between items-start gap-8">
         <div>
           <h1 class="text-3xl font-bold tracking-tight mb-2 text-white">團隊分紅結算</h1>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-900 text-blue-200 uppercase tracking-widest border border-blue-800">Finance Pro</span>
-             <input type="text" id="date-range" class="bg-transparent text-slate-500 text-xs font-mono w-48 focus:text-blue-400 transition-colors border-none outline-none p-0" placeholder="點擊輸入日期..." onchange="window.saveData()">
+             <div class="week-bar">
+                <button class="btn-nav" onclick="window.changeWeek(-1)" title="上一週">◀</button>
+                <input type="week" id="weekSelector" onchange="window.handleWeekChange()">
+                <button class="btn-nav" onclick="window.changeWeek(1)" title="下一週">▶</button>
+                <span id="weekRangeDisplay" class="week-range">--/-- ~ --/--</span>
+             </div>
           </div>
         </div>
-        
+
         <div class="w-full md:w-auto text-right">
             <div class="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">總收入 (Total Revenue)</div>
             <div class="flex items-center justify-end relative">
                 <span class="text-2xl text-emerald-500 mr-2 font-bold absolute -left-6">$</span>
-                <input type="number" inputmode="decimal" id="income" 
-                       class="text-5xl font-mono font-bold text-white w-48 text-right bg-transparent border-b border-slate-800 focus:border-emerald-500 focus:outline-none transition-colors placeholder-slate-700" 
-                       placeholder="0" oninput="window.calculate()">
+                <input type="number" inputmode="decimal" id="income"
+                       class="text-5xl font-mono font-bold text-white w-48 text-right bg-transparent border-b border-slate-800 focus:border-emerald-500 focus:outline-none transition-colors placeholder-slate-700"
+                       placeholder="0" oninput="window.calculate(); window.saveData();">
             </div>
         </div>
       </div>
@@ -176,7 +202,7 @@
     </div>
 
     <div class="p-8 bg-slate-900">
-      
+
       <div class="flex flex-wrap items-center justify-between gap-4 mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg">
          <div class="flex items-center gap-2 text-sm text-slate-400 font-mono flex-wrap">
             <span class="bg-slate-700 px-2 py-1 rounded text-slate-300 font-bold text-xs">公式</span>
@@ -210,12 +236,13 @@
 
   <script type="module">
     // === LifeOS 統一版：Firebase 從租戶系統取得，不再硬編碼 ===
-    import { ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+    import { ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
     import { bootTenant } from "./core/tenant-boot.js";
 
     const tenant = await bootTenant();
     const db = tenant.tenantDb;
-    const dbRef = ref(db, 'office_settlement_v8_dark');
+    const ROOT_PATH = 'office_settlement_v8_dark';
+    const dbRef = ref(db, ROOT_PATH);
     document.title = 'LifeOS · 分紅結算（' + (tenant.name || tenant.code) + '）';
     // 首頁按鈕帶回該租客入口（?t=<code>）
     const __home = document.getElementById('homeLink');
@@ -224,6 +251,8 @@
     let shareholders = [];
     let expenses = [];
     let income = 0;
+    let rootData = null;          // 保存整個 root snapshot，切週時讀對應的 weeks[W].income
+    let currentWeekId = "";
     let isLocalUpdate = false;
     let saveTimeout = null;
 
@@ -234,35 +263,113 @@
           { name: '黑', percent: 5 }
       ],
       expenses: [
-        { type: 'team', name: '做圖軟體月費', amount: 450, paidBy: 'OG' }, 
+        { type: 'team', name: '做圖軟體月費', amount: 450, paidBy: 'OG' },
         { type: 'company', name: '公司房租代墊', amount: 26233, paidBy: 'OG' },
         { type: 'team', name: '團隊聚餐', amount: 1200, paidBy: 'C' }
-      ],
-      income: 0,
-      dateRange: ''
+      ]
     };
 
-    onValue(dbRef, (snapshot) => {
+    // ─── 週次工具（邏輯對齊 weekly.html） ───
+    function getISOWeekString(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+      return d.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' : '') + weekNo;
+    }
+    function getWeekDateRange(weekStr) {
+      if (!weekStr) return "--/-- ~ --/--";
+      const parts = weekStr.split('-W');
+      if (parts.length !== 2) return "";
+      const year = parseInt(parts[0]); const week = parseInt(parts[1]);
+      const simple = new Date(year, 0, 1 + (week - 1) * 7);
+      const dow = simple.getDay();
+      const ISOweekStart = simple;
+      if (dow <= 4) ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+      else ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+      const start = new Date(ISOweekStart);
+      const end = new Date(ISOweekStart);
+      end.setDate(start.getDate() + 6);
+      const fmt = d => `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}`;
+      return `${fmt(start)} ~ ${fmt(end)}`;
+    }
+    function updateWeekDisplay() {
+      const el = document.getElementById('weekRangeDisplay');
+      if (el) el.innerText = getWeekDateRange(currentWeekId);
+    }
+    function loadIncomeForCurrentWeek() {
+      const weeks = (rootData && rootData.weeks) || {};
+      const w = weeks[currentWeekId] || {};
+      income = parseFloat(w.income) || 0;
+      const incEl = document.getElementById('income');
+      if (incEl) incEl.value = income || '';
+      window.renderAll();
+    }
+    function initWeekSelector() {
+      currentWeekId = getISOWeekString(new Date());
+      const sel = document.getElementById('weekSelector');
+      if (sel) sel.value = currentWeekId;
+      updateWeekDisplay();
+    }
+    window.handleWeekChange = function () {
+      const sel = document.getElementById('weekSelector');
+      if (!sel || !sel.value) return;
+      currentWeekId = sel.value;
+      updateWeekDisplay();
+      loadIncomeForCurrentWeek();
+    };
+    window.changeWeek = function (offset) {
+      const sel = document.getElementById('weekSelector');
+      if (!sel) return;
+      sel.stepUp(offset);
+      window.handleWeekChange();
+    };
+
+    initWeekSelector();
+
+    onValue(dbRef, async (snapshot) => {
       if (isLocalUpdate) {
-          isLocalUpdate = false; 
+          isLocalUpdate = false;
           updateStatus('online');
           return;
       }
       updateStatus('syncing');
       const data = snapshot.val();
+      rootData = data;
+
       if (data) {
+        // === 舊版資料一次性遷移：root.income 存在但沒有 weeks 節點 ===
+        if (typeof data.income === 'number' && !data.weeks) {
+          const migrated = {
+            shareholders: data.shareholders || defaultData.shareholders,
+            expenses: data.expenses || defaultData.expenses,
+            weeks: {
+              [currentWeekId]: {
+                income: data.income,
+                lastUpdated: new Date().toISOString()
+              }
+            },
+            lastUpdated: new Date().toISOString()
+          };
+          isLocalUpdate = true;
+          await set(dbRef, migrated);
+          // 下一次 onValue 會進新結構分支，這裡先 return
+          return;
+        }
+
         shareholders = data.shareholders || [];
         expenses = data.expenses || [];
-        income = data.income || 0;
-        document.getElementById('date-range').value = data.dateRange || '';
+        loadIncomeForCurrentWeek();
       } else {
+        // 沒有資料：寫入初始預設（當週 income = 0）
         shareholders = defaultData.shareholders;
         expenses = defaultData.expenses;
-        income = defaultData.income;
+        income = 0;
+        document.getElementById('income').value = '';
         saveDataToCloud();
+        window.renderAll();
       }
-      document.getElementById('income').value = income;
-      renderAll();
       updateStatus('online');
       document.getElementById('print-date').innerText = new Date().toLocaleDateString();
     });
@@ -304,7 +411,7 @@
         const isTeam = exp.type === 'team';
         const rowClass = isTeam ? 'row-team' : 'row-company';
         const tagClass = isTeam ? 'tag-team' : 'tag-company';
-        
+
         return `
             <div class="expense-row ${rowClass} grid grid-cols-1 md:grid-cols-12 gap-3 group">
                 <div class="col-span-1 flex justify-center gap-1 no-export opacity-30 group-hover:opacity-100 transition">
@@ -312,25 +419,25 @@
                     <button onclick="window.moveExp(${i}, 1)" class="btn-move" title="下移">▼</button>
                 </div>
                 <div class="col-span-1 md:col-span-2">
-                    <select onchange="window.updateExp(${i}, 'type', this.value)" 
+                    <select onchange="window.updateExp(${i}, 'type', this.value)"
                             class="pill-select ${tagClass}">
                         <option value="team" ${isTeam ? 'selected' : ''}>🔴 團隊支出</option>
                         <option value="company" ${!isTeam ? 'selected' : ''}>🔵 公司代墊</option>
                     </select>
                 </div>
                 <div class="col-span-1 md:col-span-4">
-                    <input type="text" value="${exp.name}" onchange="window.updateExp(${i}, 'name', this.value)" 
+                    <input type="text" value="${exp.name}" onchange="window.updateExp(${i}, 'name', this.value)"
                            class="input-box" placeholder="輸入項目名稱...">
                 </div>
                 <div class="col-span-1 md:col-span-2">
-                    <select onchange="window.updateExp(${i}, 'paidBy', this.value)" 
+                    <select onchange="window.updateExp(${i}, 'paidBy', this.value)"
                             class="input-box text-sm text-slate-400">
                         ${payerOptions(exp.paidBy)}
                     </select>
                 </div>
                 <div class="col-span-1 md:col-span-2 flex items-center relative">
                     <span class="text-slate-500 absolute left-2 pointer-events-none text-xs">$</span>
-                    <input type="number" inputmode="decimal" value="${exp.amount}" onkeyup="window.updateExp(${i}, 'amount', this.value)" 
+                    <input type="number" inputmode="decimal" value="${exp.amount}" onkeyup="window.updateExp(${i}, 'amount', this.value)"
                            class="input-box amount-input" placeholder="0">
                 </div>
                 <div class="col-span-1 text-center no-export">
@@ -343,7 +450,7 @@
 
     function renderShareholderCards(netProfit) {
         const container = document.getElementById('shareholder-cards');
-        
+
         container.innerHTML = shareholders.map((sh, idx) => {
             let dividend = Math.floor(netProfit * (sh.percent / 100));
             const teamPaidItems = expenses.filter(e => e.paidBy === sh.name && e.type === 'team');
@@ -369,10 +476,10 @@
 
                 <div class="p-5 border-b border-slate-700 bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-xl">
                     <div class="flex items-center gap-3 mb-2">
-                        <input type="text" value="${sh.name}" onchange="window.updateSh(${idx}, 'name', this.value)" 
+                        <input type="text" value="${sh.name}" onchange="window.updateSh(${idx}, 'name', this.value)"
                                class="font-bold text-xl text-white bg-transparent w-full focus:text-blue-400 outline-none">
                         <div class="flex items-center bg-slate-900 px-2 py-1 rounded-full border border-slate-700">
-                            <input type="number" value="${sh.percent}" onkeyup="window.updateSh(${idx}, 'percent', this.value)" 
+                            <input type="number" value="${sh.percent}" onkeyup="window.updateSh(${idx}, 'percent', this.value)"
                                    class="w-6 text-center font-mono text-xs outline-none text-slate-400 bg-transparent">
                             <span class="text-[10px] text-slate-500">%</span>
                         </div>
@@ -442,7 +549,7 @@
     window.updateSh = (i, k, v) => { shareholders[i][k] = k === 'percent' ? parseFloat(v) || 0 : v; if(k === 'name') renderExpenses(); window.calculate(); window.saveData(); };
     window.addShareholder = () => { shareholders.push({ name: 'New', percent: 0 }); window.renderAll(); window.saveData(); };
     window.removeSh = (i) => { if(confirm('刪除?')) { shareholders.splice(i, 1); window.renderAll(); window.saveData(); } };
-    
+
     window.saveData = function() {
       updateStatus('syncing');
       if (saveTimeout) clearTimeout(saveTimeout);
@@ -450,14 +557,17 @@
     }
     function saveDataToCloud() {
       isLocalUpdate = true;
-      const dataToSave = {
-        income: income,
-        dateRange: document.getElementById('date-range').value,
-        expenses: expenses,
+      const now = new Date().toISOString();
+      const payload = {
         shareholders: shareholders,
-        lastUpdated: new Date().toISOString()
+        expenses: expenses,
+        lastUpdated: now
       };
-      set(dbRef, dataToSave).then(() => { updateStatus('online') });
+      if (currentWeekId) {
+        payload[`weeks/${currentWeekId}/income`] = income;
+        payload[`weeks/${currentWeekId}/lastUpdated`] = now;
+      }
+      update(dbRef, payload).then(() => updateStatus('online'));
     }
 
     function updateStatus(state) {
@@ -470,9 +580,11 @@
       }
     }
     window.resetCloudData = function() {
-      if (confirm('確定重置？')) {
-        shareholders = defaultData.shareholders; expenses = defaultData.expenses; income = 0;
-        saveDataToCloud(); window.renderAll();
+      if (confirm('確定重置本週收入為 0？\n（股東與支出項目為全域共用，不會被動到）')) {
+        income = 0;
+        document.getElementById('income').value = '';
+        saveDataToCloud();
+        window.renderAll();
       }
     }
   </script>

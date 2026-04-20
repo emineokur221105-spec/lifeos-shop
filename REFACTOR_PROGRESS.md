@@ -119,7 +119,23 @@
 ## 📝 當前進度
 
 **Phase 3 進行中（v11 統一 + admin 密碼升級 都做完了，等 kabe 實際驗收）**
-最後更新：2026-04-20 深夜 Asia/Taipei
+最後更新：2026-04-20 深夜 4 Asia/Taipei
+
+**剛完成（2026-04-20 深夜 4）：office.html 週次化（方案 B）**
+- **移除下載報表按鈕** + `window.downloadReport` + html2canvas CDN（不再需要截圖功能）
+- **自由文字日期** → **週選擇器**（`<input type="week">` + 前後箭頭，樣式配合深色主題）
+  - helpers `getISOWeekString` / `getWeekDateRange` 從 weekly.html 對齊過來
+- **資料模型改為「混合模式」**：
+  - 舊：`office_settlement_v8_dark/{shareholders, expenses, income, dateRange}`（單一節點）
+  - 新：`office_settlement_v8_dark/{shareholders, expenses, weeks: {<W>: {income, lastUpdated}}}`
+  - **股東配比、支出清單** → 全域共用（每週一樣）
+  - **收入** → 分週存（每週不同）
+- **一次性資料遷移**：`onValue` 讀到舊結構（有 root.income 但沒有 weeks）自動搬到當週 weeks/<W>/income，只跑一次
+- **寫入改用 `update` + 分層路徑**：一次 `update` 同時寫股東/支出（全域）+ `weeks/<W>/income`，不會覆蓋其他週
+- **順手修原 code bug**：收入 input 原本只 oninput calculate 沒 saveData，導致輸入不會存；加上 `window.saveData()`
+- **重置語意調整**：從「清空全部」改「只把本週收入歸零」（避免誤殺其他週資料）
+- 2 個 commit 分開：移除下載報表（獨立） / 週選擇器+資料模型（相依一起）
+- kabe 選方案 B：股東/支出全域，收入分週 → 切週只要改金額最輕鬆
 
 **最新狀態（以 git log 為準）：**
 - `12e9554` admin 入口改 SHA-256 驗證 + index 完全移除 admin 痕跡 ← **最新**
