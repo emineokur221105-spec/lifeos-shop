@@ -1099,7 +1099,8 @@ function resetFromModal() {
 function downloadScreenshot() {
   if (typeof html2canvas !== 'function') { alert('html2canvas 尚未載入'); return; }
   const target = document.getElementById('view-settle');
-  if (!target) return;
+  const settleContainer = target ? target.querySelector('.settle-container') : null;
+  if (!target || !settleContainer) return;
 
   // 截圖前暫時隱藏不要的區塊
   const toHide = [];
@@ -1109,11 +1110,39 @@ function downloadScreenshot() {
   if (regionTabs && regionTabs.parentElement && target.contains(regionTabs.parentElement)) {
     toHide.push(regionTabs.parentElement);
   }
-  const saved = toHide.map(el => ({ el, display: el.style.display }));
+  const savedHide = toHide.map(el => ({ el, display: el.style.display }));
   toHide.forEach(el => { el.style.display = 'none'; });
 
+  // 暫時解除 overflow / height 限制，讓 html2canvas 能抓到完整內容
+  const saveStyle = (el) => ({
+    el,
+    height: el.style.height,
+    maxHeight: el.style.maxHeight,
+    overflow: el.style.overflow,
+    overflowY: el.style.overflowY,
+    paddingBottom: el.style.paddingBottom,
+  });
+  const savedStyle = [saveStyle(target), saveStyle(settleContainer)];
+  const unlockScroll = (el) => {
+    el.style.height = 'auto';
+    el.style.maxHeight = 'none';
+    el.style.overflow = 'visible';
+    el.style.overflowY = 'visible';
+  };
+  unlockScroll(target);
+  unlockScroll(settleContainer);
+  settleContainer.style.paddingBottom = '10px';
+
   showToast('⏳ 截圖處理中...');
-  html2canvas(target, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
+  const fullHeight = settleContainer.scrollHeight;
+  html2canvas(target, {
+    backgroundColor: '#ffffff',
+    scale: 2,
+    windowHeight: fullHeight + 100,
+    height: fullHeight,
+    scrollX: 0,
+    scrollY: 0,
+  }).then(canvas => {
     const link = document.createElement('a');
     link.download = `日結_${state.currentActiveDate.replace(/\//g, '-')}.png`;
     link.href = canvas.toDataURL('image/png');
@@ -1123,7 +1152,14 @@ function downloadScreenshot() {
     console.error(err);
     showToast('❌ 截圖失敗');
   }).finally(() => {
-    saved.forEach(s => { s.el.style.display = s.display; });
+    savedHide.forEach(s => { s.el.style.display = s.display; });
+    savedStyle.forEach(s => {
+      s.el.style.height = s.height;
+      s.el.style.maxHeight = s.maxHeight;
+      s.el.style.overflow = s.overflow;
+      s.el.style.overflowY = s.overflowY;
+      s.el.style.paddingBottom = s.paddingBottom;
+    });
   });
 }
 
