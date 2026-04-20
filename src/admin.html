@@ -141,9 +141,16 @@
 <div id="toast" class="toast"></div>
 
 <script type="module">
-  // ---- 0. 登入檢查 ----
+  // ---- 0. 登入檢查（SHA-256 比對，明文不進原始碼）----
   const params = new URLSearchParams(location.search);
-  if (params.get('admin') !== '0308') {
+  const ADMIN_KEY_HASH = '1662edf93d2469d8b7f5d33eb7a411e51e7c5186e5d81c14a0e85ac8295abd0e';
+  async function sha256Hex(str) {
+    const bytes = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  const adminKey = params.get('admin');
+  if (!adminKey || await sha256Hex(adminKey) !== ADMIN_KEY_HASH) {
     document.documentElement.innerHTML =
       '<body style="background:#1a1a1a;color:#eee;font-family:-apple-system,sans-serif;' +
       'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">' +

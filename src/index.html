@@ -101,13 +101,8 @@
 
   const params = new URLSearchParams(window.location.search);
   const tenantCode = params.get('t');
-  const adminKey = params.get('admin');
 
-  if (adminKey === '0308') {
-    setStatus('<span class="spinner"></span>進入 Admin 後台...', 'loading');
-    window.location.replace('./admin.html?admin=' + encodeURIComponent(adminKey));
-  }
-  else if (tenantCode) {
+  if (tenantCode) {
     try {
       setStatus('<span class="spinner"></span>驗證授權中...', 'loading');
       const { bootTenant } = await import('./core/tenant-boot.js');
@@ -131,8 +126,7 @@
     setStatus(
       '系統需要從租戶連結進入。' +
       '<div class="hint">' +
-      '租客入口：<code>?t=&lt;代號&gt;</code><br>' +
-      'Admin 入口：<code>?admin=0308</code>' +
+      '租客入口：<code>?t=&lt;代號&gt;</code>' +
       '</div>',
       'info'
     );
