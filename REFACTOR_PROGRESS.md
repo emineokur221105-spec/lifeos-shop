@@ -31,18 +31,21 @@
 - [x] repo 網址：https://github.com/emineokur221105-spec/lifeos-shop
 - [x] Pages 網址：https://emineokur221105-spec.github.io/lifeos-shop/
 
-### Phase 0.5：安全與混淆基礎（進行中）
-- [ ] 建立 `.github/workflows/deploy.yml`（Actions 自動混淆 + 部署）
-- [ ] 建立 `package.json`（terser 依賴）
-- [ ] 區分 `src/`（原始碼、會被混淆）和 `public/`（靜態檔、不混淆）
-- [ ] 建立 `core/security.js`（三層防禦：hostname hash 比對 + F12 + DevTools 偵測）
+### Phase 0.5：安全與混淆基礎（完成）
+- [x] `.github/workflows/deploy.yml` 建好且驗證成功
+- [x] `package.json`（terser ^5.36.0）
+- [x] `build.js` 自製混淆流程（跳過 firebase SDK 和 html2canvas）
+- [x] `src/` 放原始碼、`dist/` 是混淆後（gitignore）
+- [x] `一鍵部署.bat` Raymond 雙擊用
+- [x] `LOCAL_SECRETS.md` gitignore 存主 Firebase config
+- [x] 驗證 Pipeline 通過：線上 boot.js 確實被混淆 ✅
 
-### Phase 1：核心架構（待開始）
-- [ ] Raymond 開「主 Firebase」project（Claude 寫教學）
+### Phase 1：核心架構（進行中）
+- [x] Raymond 開「主 Firebase」project：`lifeos-shop-main`（config 存 LOCAL_SECRETS.md）
 - [ ] 建 `core/` 資料夾
   - [ ] `main-firebase-config.js`（主 Firebase 連線設定）
   - [ ] `tenant-loader.js`（讀 `?t=xxx` 查租戶 Firebase 設定）
-  - [ ] `security.js`（統一防盜模組）
+  - [x] `security.js`（統一防盜模組）2026-04-20
   - [ ] `common.js`（共用工具：showToast、parseTime 等）
 - [ ] 新 `index.html`（簡潔入口，檢查 `?t=` 和 `?admin=`）
 - [ ] Admin 後台 `admin.html`
@@ -70,20 +73,17 @@
 
 ## 📝 當前進度
 
-**Phase 0 進行中**
-最後更新：2026-04-20 08:24 Asia/Taipei
+**Phase 1 進行中**
+最後更新：2026-04-20 Asia/Taipei
 
-**已完成：**
-- 本機資料夾建立
-- git init 完成（分支：main）
-- git 身份設定：Raymond / x38446@gmail.com
-- `.gitignore`、`README.md`、`REFACTOR_PROGRESS.md` 建立
+**剛完成：**
+- `src/core/security.js`：三層防禦完成（SHA-256 hostname 白名單 + F12 快捷鍵擋 + DevTools 尺寸偵測），對外暴露 `window.LifeOSSecurity.init({ allowedHashes })`
 
-**下一步：**
-1. 寫 `SETUP_GUIDE.md` 雛形
-2. `gh repo create lifeos-shop --public --source=. --push`
-3. 啟用 GitHub Pages
-4. 驗證網址並回報 Raymond
+**下一步（Phase 1 剩餘）：**
+1. 寫 `src/core/main-firebase-config.js`（v11 modular，初始化主 FB app + db）
+2. 寫 `src/core/tenant-loader.js`（根據 `?t=` 從主 FB 抓租戶設定）
+3. 寫 `src/admin.html` Admin 後台（租戶 CRUD + 白名單管理）
+4. 改寫 `src/index.html` 成正式入口路由
 
 ---
 
