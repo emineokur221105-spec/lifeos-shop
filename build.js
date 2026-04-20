@@ -11,6 +11,11 @@ const SKIP_MINIFY = new Set([
   'html2canvas.min.js',
 ]);
 
+// 開關：HTML 內嵌 <script> 是否也進 terser
+// 之前開啟時 roster 有運作異常，暫先關掉；本地重現+修復後再打開
+// 用法：MINIFY_HTML_INLINE=1 node build.js
+const MINIFY_HTML_INLINE = process.env.MINIFY_HTML_INLINE === '1';
+
 const TERSER_BASE = {
   compress: {
     drop_console: false,
@@ -115,13 +120,18 @@ async function walk(srcDir, distDir) {
         fs.copyFileSync(srcPath, distPath);
       }
     } else if (entry.name.endsWith('.html')) {
-      const html = fs.readFileSync(srcPath, 'utf8');
-      try {
-        const out = await minifyHtmlInlineScripts(html, rel);
-        fs.writeFileSync(distPath, out, 'utf8');
-      } catch (err) {
-        console.error(`[fail-html] ${srcPath}: ${err.message}`);
+      if (!MINIFY_HTML_INLINE) {
         fs.copyFileSync(srcPath, distPath);
+        console.log(`[copy-html] ${rel}（內嵌 script 混淆已關閉）`);
+      } else {
+        const html = fs.readFileSync(srcPath, 'utf8');
+        try {
+          const out = await minifyHtmlInlineScripts(html, rel);
+          fs.writeFileSync(distPath, out, 'utf8');
+        } catch (err) {
+          console.error(`[fail-html] ${srcPath}: ${err.message}`);
+          fs.copyFileSync(srcPath, distPath);
+        }
       }
     } else {
       fs.copyFileSync(srcPath, distPath);

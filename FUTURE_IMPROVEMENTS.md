@@ -8,9 +8,11 @@
 
 ## 🔒 安全與混淆
 
-- **[P1] HTML 內嵌 `<script>` 混淆** ← 2026-04-20 已補
+- **[P1] HTML 內嵌 `<script>` 混淆**（2026-04-20 試做後暫時關閉）
   - 原本只有獨立 `.js` 會混淆，所有頁面的內嵌 JS 是明碼
-  - 已擴充 `build.js` 處理 inline script
+  - `build.js` 已寫好 `minifyHtmlInlineScripts()`，但開啟後 roster 線上無法載入
+  - 現狀：`MINIFY_HTML_INLINE` 環境變數預設 `false`，要打開得設 `=1`
+  - 待辦：本地重現破壞原因（module scope? Sortable 全域查找?）再重啟
 - **[P2] Admin 密碼升級**
   - 目前 `?admin=0308` 是明碼 URL 參數，任何人看到網址就知道
   - 未來改：登入頁 + Firebase Auth（Email/Password 或 Google 登入）+ 真正的權限檢查
