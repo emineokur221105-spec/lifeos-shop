@@ -43,8 +43,8 @@
 ### Phase 1：核心架構（進行中）
 - [x] Raymond 開「主 Firebase」project：`lifeos-shop-main`（config 存 LOCAL_SECRETS.md）
 - [ ] 建 `core/` 資料夾
-  - [ ] `main-firebase-config.js`（主 Firebase 連線設定）
-  - [ ] `tenant-loader.js`（讀 `?t=xxx` 查租戶 Firebase 設定）
+  - [x] `main-firebase-config.js`（主 Firebase 連線設定）2026-04-20
+  - [x] `tenant-loader.js`（讀 `?t=xxx` 查租戶 Firebase 設定）2026-04-20
   - [x] `security.js`（統一防盜模組）2026-04-20
   - [ ] `common.js`（共用工具：showToast、parseTime 等）
 - [ ] 新 `index.html`（簡潔入口，檢查 `?t=` 和 `?admin=`）
@@ -77,13 +77,23 @@
 最後更新：2026-04-20 Asia/Taipei
 
 **剛完成：**
-- `src/core/security.js`：三層防禦完成（SHA-256 hostname 白名單 + F12 快捷鍵擋 + DevTools 尺寸偵測），對外暴露 `window.LifeOSSecurity.init({ allowedHashes })`
+- `src/core/security.js`：三層防禦（SHA-256 白名單 + F12 攔截 + DevTools 偵測）
+- `src/core/main-firebase-config.js`：v11 modular，export `mainApp` / `mainDb`
+- `src/core/tenant-loader.js`：export `loadWhitelist()` / `loadTenant(code)` / `listTenants()`
+
+**主 Firebase 資料結構（已確定）：**
+```
+/whitelist/<sha256-hash>: true
+/tenants/<代號>/
+  ├── name
+  ├── firebaseConfig (object)
+  └── defaults (object)
+```
 
 **下一步（Phase 1 剩餘）：**
-1. 寫 `src/core/main-firebase-config.js`（v11 modular，初始化主 FB app + db）
-2. 寫 `src/core/tenant-loader.js`（根據 `?t=` 從主 FB 抓租戶設定）
-3. 寫 `src/admin.html` Admin 後台（租戶 CRUD + 白名單管理）
-4. 改寫 `src/index.html` 成正式入口路由
+1. 寫 `src/admin.html` Admin 後台（租戶 CRUD + 白名單管理）
+2. 改寫 `src/index.html` 成正式入口路由（檢查 `?t=` / `?admin=`，串 security + tenant-loader）
+3. `common.js` 等移植 shop.html 時再依需求補
 
 ---
 
