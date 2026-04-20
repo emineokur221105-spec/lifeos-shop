@@ -60,7 +60,10 @@
   - [x] 搬檔到 `src/roster.html`，原 UI / 邏輯 598 行完全保留
   - [x] 只改 Firebase 初始化段（原 hardcoded v10.7.1 → 改用 bootTenant + tenantDb）
   - [x] title 改顯示租戶名
-- [ ] `office.html`（團隊分紅）
+- [x] `office.html`（團隊分紅）2026-04-20
+  - 搬到 `src/office.html`，原 504 行 UI / 邏輯完全保留
+  - Firebase v11.0.2 → v11.0.1 統一版本，改用 bootTenant + tenantDb
+  - index.html 的 office 按鈕解鎖
 - [ ] `weekly.html`（週結業績）
 - [ ] `shop.html`（最大、最核心）
   - [ ] 改寫成 v11 modular
@@ -115,11 +118,10 @@
   - 有 ?t= 但租戶不存在會報錯（由 tenant-loader 丟）
 
 **下一步：**
-1. 搬 `office.html`（獨立頁、v11 modular 已是）
-2. 搬 `weekly.html`（v8 compat → v11 modular）
-3. 搬 `shop.html`（最硬，7 個 JS 檔）
-4. `settings.html` 整併進 admin
-5. `common.js` 等 shop.html 移植時依需求補
+1. 搬 `weekly.html`（v8 compat → v11 modular，獨立頁的業績對帳）
+2. 搬 `shop.html`（最硬，7 個 JS 檔）
+3. `settings.html` 整併進 admin
+4. `common.js` 等 shop.html 移植時依需求補
 
 ---
 
