@@ -54,15 +54,20 @@
   - [x] 白名單管理（輸入 hostname → 算 SHA-256 → 存 `{ label }`）
   - [x] Toast 提示 + 二次確認刪除
 
-### Phase 2：模組移植（待開始）
+### Phase 2：模組移植（進行中）
+- [x] `src/core/tenant-boot.js`：頁面共用開機（驗白名單 + 載租戶）2026-04-20
+- [x] `roster.html`（人員雲端管理）2026-04-20
+  - [x] 搬檔到 `src/roster.html`，原 UI / 邏輯 598 行完全保留
+  - [x] 只改 Firebase 初始化段（原 hardcoded v10.7.1 → 改用 bootTenant + tenantDb）
+  - [x] title 改顯示租戶名
+- [ ] `office.html`（團隊分紅）
+- [ ] `weekly.html`（週結業績）
 - [ ] `shop.html`（最大、最核心）
   - [ ] 改寫成 v11 modular
   - [ ] 接上 tenant-loader
   - [ ] 7 個 shop_data JS 檔逐一改寫
-- [ ] `office.html`（團隊分紅）
-- [ ] `weekly.html`（週結業績）
-- [ ] `roster.html`（人員雲端管理）
 - [ ] 原本的 `settings.html` 整併進 admin 後台
+- [ ] 改寫 `index.html` 成租戶功能選單（載完後顯示 4 按鈕，目前只有 roster 可用）
 
 ### Phase 3：驗收（待開始）
 - [ ] Raymond 實際操作確認 UI 一模一樣
@@ -103,10 +108,19 @@
   └── defaults (object)
 ```
 
-**下一步：Phase 1 基本上完成 → 準備進 Phase 2**
-- Raymond 線上測試 admin.html：用 `?admin=0308` 進後台 → 加白名單（先加 `localhost` 免得鎖死，再加 `emineokur221105-spec.github.io`）→ 建第一個租戶
-- Phase 2 開頭：shop.html 移植（最大工程，改 Firebase SDK v8 → v11 modular + 接 tenant-loader）
-- `common.js` 等 shop.html 移植時依需求補
+**Phase 2 進行中（2026-04-20）：**
+- 已完成：tenant-boot.js + roster.html（熱身）
+- 測試方式：`https://emineokur221105-spec.github.io/lifeos-shop/roster.html?t=demo-qinre-main`
+  - 沒 ?t= 會自動跳回首頁
+  - 有 ?t= 但租戶不存在會報錯（由 tenant-loader 丟）
+
+**下一步：**
+1. 改寫 `index.html` 成租戶功能選單（載完租戶後顯示 4 按鈕，目前 roster 可點、其他 3 個先 disabled）
+2. 搬 `office.html`（獨立頁、v11 modular 已是）
+3. 搬 `weekly.html`（v8 compat → v11 modular）
+4. 搬 `shop.html`（最硬，7 個 JS 檔）
+5. `settings.html` 整併進 admin
+6. `common.js` 等 shop.html 移植時依需求補
 
 ---
 
