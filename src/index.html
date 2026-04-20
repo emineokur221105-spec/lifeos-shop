@@ -5,20 +5,101 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LifeOS Shop</title>
 <style>
-body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: #eee;
-       display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-.box { text-align: center; }
-h1 { color: #27ae60; }
-code { background: #333; padding: 2px 6px; border-radius: 3px; color: #ffd700; }
+  body {
+    font-family: -apple-system, "Noto Sans TC", sans-serif;
+    background: #1a1a1a;
+    color: #eee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .box {
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+  }
+  h1 { color: #27ae60; margin-bottom: 8px; }
+  .subtitle { color: #999; margin-top: 0; margin-bottom: 24px; font-size: 14px; }
+  .msg { background: #222; padding: 20px; border-radius: 8px; margin: 16px 0; line-height: 1.7; }
+  .msg.ok { border-left: 4px solid #27ae60; }
+  .msg.err { border-left: 4px solid #e74c3c; color: #ff8a80; }
+  .msg.info { border-left: 4px solid #3498db; }
+  .msg.loading { border-left: 4px solid #f39c12; color: #ffd27d; }
+  code { background: #333; padding: 2px 6px; border-radius: 3px; color: #ffd700; }
+  .hint { font-size: 13px; color: #888; margin-top: 20px; }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #444;
+    border-top-color: #f39c12;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <div class="box">
   <h1>LifeOS-Shop</h1>
-  <p>系統建置中...</p>
-  <p>租客入口: <code>?t=&lt;代號&gt;</code></p>
-  <p>Admin 入口: <code>?admin=0308</code></p>
-  <script src="./boot.js"></script>
+  <p class="subtitle">多租戶門店管理系統</p>
+  <div id="status" class="msg info">正在啟動...</div>
 </div>
+
+<script type="module">
+  const statusEl = document.getElementById('status');
+  const setStatus = (html, kind) => {
+    statusEl.className = 'msg ' + (kind || 'info');
+    statusEl.innerHTML = html;
+  };
+
+  const params = new URLSearchParams(window.location.search);
+  const tenantCode = params.get('t');
+  const adminKey = params.get('admin');
+
+  if (adminKey === '0308') {
+    setStatus('<span class="spinner"></span>進入 Admin 後台...', 'loading');
+    window.location.replace('./admin.html?admin=' + encodeURIComponent(adminKey));
+  }
+  else if (tenantCode) {
+    try {
+      setStatus('<span class="spinner"></span>驗證授權中...', 'loading');
+      await import('./core/security.js');
+      const tlMod = await import('./core/tenant-loader.js');
+
+      const whitelist = await tlMod.loadWhitelist();
+      await window.LifeOSSecurity.init({ allowedHashes: whitelist });
+
+      setStatus('<span class="spinner"></span>載入租戶 <code>' + tenantCode + '</code>...', 'loading');
+      const tenant = await tlMod.loadTenant(tenantCode);
+
+      setStatus(
+        '✅ 租戶已載入：<code>' + tenant.code + '</code>' +
+        (tenant.name && tenant.name !== tenant.code ? '（' + tenant.name + '）' : '') +
+        '<div class="hint">shop.html 尚未移植，Phase 2 完成後會自動跳轉。</div>',
+        'ok'
+      );
+      window.__lifeos_tenant = tenant;
+    } catch (err) {
+      console.error('[LifeOS] 啟動失敗', err);
+      setStatus('❌ ' + (err && err.message ? err.message : '啟動失敗'), 'err');
+    }
+  }
+  else {
+    setStatus(
+      '系統需要從租戶連結進入。' +
+      '<div class="hint">' +
+      '租客入口：<code>?t=&lt;代號&gt;</code><br>' +
+      'Admin 入口：<code>?admin=0308</code>' +
+      '</div>',
+      'info'
+    );
+  }
+</script>
 </body>
 </html>

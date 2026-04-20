@@ -47,7 +47,7 @@
   - [x] `tenant-loader.js`（讀 `?t=xxx` 查租戶 Firebase 設定）2026-04-20
   - [x] `security.js`（統一防盜模組）2026-04-20
   - [ ] `common.js`（共用工具：showToast、parseTime 等）
-- [ ] 新 `index.html`（簡潔入口，檢查 `?t=` 和 `?admin=`）
+- [x] 新 `index.html`（路由骨架：`?t=`/`?admin=` 分流，串 security + tenant-loader）2026-04-20
 - [ ] Admin 後台 `admin.html`
   - [ ] 登入檢查（`?admin=0308`）
   - [ ] 租戶清單 CRUD
@@ -76,7 +76,15 @@
 **Phase 1 進行中**
 最後更新：2026-04-20 Asia/Taipei
 
-**剛完成：**
+**剛完成（2026-04-20）：**
+- `src/index.html`：從測試殼改寫成正式入口路由（ES module）
+  - `?admin=0308` → redirect 到 `admin.html`（admin.html 尚未建，此路徑先備著）
+  - `?t=<代號>` → 動態 import security + tenant-loader → loadWhitelist → security.init → loadTenant → 目前顯示「租戶已載入」（Phase 2 完成後改 redirect 到 shop.html）
+  - 無參數 → 顯示首頁提示
+  - 深色背景 + spinner + 錯誤顯示
+- 刪除 `src/boot.js`（pipeline 測試殼，邏輯已整合進 index.html）
+
+**之前完成：**
 - `src/core/security.js`：三層防禦（SHA-256 白名單 + F12 攔截 + DevTools 偵測）
 - `src/core/main-firebase-config.js`：v11 modular，export `mainApp` / `mainDb`
 - `src/core/tenant-loader.js`：export `loadWhitelist()` / `loadTenant(code)` / `listTenants()`
@@ -91,9 +99,8 @@
 ```
 
 **下一步（Phase 1 剩餘）：**
-1. 寫 `src/admin.html` Admin 後台（租戶 CRUD + 白名單管理）
-2. 改寫 `src/index.html` 成正式入口路由（檢查 `?t=` / `?admin=`，串 security + tenant-loader）
-3. `common.js` 等移植 shop.html 時再依需求補
+1. 寫 `src/admin.html` Admin 後台（登入檢查 + 租戶 CRUD + 白名單管理）
+2. `common.js` 等移植 shop.html 時再依需求補
 
 ---
 
