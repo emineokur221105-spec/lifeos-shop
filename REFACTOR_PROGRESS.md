@@ -20,15 +20,22 @@
 
 ## 📋 Phase 清單
 
-### Phase 0：基礎設施（進行中）
+### Phase 0：基礎設施（完成）
 - [x] 建立本機資料夾 `C:/Users/makeo/Desktop/LifeOS-Shop-統一版/`
 - [x] git init + 設定 user.name/email
 - [x] 建立 `REFACTOR_PROGRESS.md`（這份）
-- [ ] 建立 `SETUP_GUIDE.md` 雛形
-- [ ] 建立 GitHub repo `lifeos-shop`
-- [ ] 首次 commit + push
-- [ ] 啟用 GitHub Pages
-- [ ] 驗證 Pages 網址可開
+- [x] 建立 `SETUP_GUIDE.md` 雛形
+- [x] 建立 GitHub repo `lifeos-shop`
+- [x] 首次 commit + push
+- [x] 啟用 GitHub Pages
+- [x] repo 網址：https://github.com/emineokur221105-spec/lifeos-shop
+- [x] Pages 網址：https://emineokur221105-spec.github.io/lifeos-shop/
+
+### Phase 0.5：安全與混淆基礎（進行中）
+- [ ] 建立 `.github/workflows/deploy.yml`（Actions 自動混淆 + 部署）
+- [ ] 建立 `package.json`（terser 依賴）
+- [ ] 區分 `src/`（原始碼、會被混淆）和 `public/`（靜態檔、不混淆）
+- [ ] 建立 `core/security.js`（三層防禦：hostname hash 比對 + F12 + DevTools 偵測）
 
 ### Phase 1：核心架構（待開始）
 - [ ] Raymond 開「主 Firebase」project（Claude 寫教學）
@@ -91,6 +98,10 @@
 | 主分支 | `main` | 2026-04-20 |
 | GitHub 帳號 | `emineokur221105-spec` | 2026-04-20 |
 | 雙層 Firebase | 主 Firebase 存租戶清單；每個租戶自己的 Firebase 存營運資料 | 2026-04-20 |
+| 混淆方式 | GitHub Actions 自動跑 terser，push 後雲端壓縮部署 | 2026-04-20 |
+| 白名單儲存 | SHA-256 hash 存主 Firebase，前端啟動時比對 | 2026-04-20 |
+| F12 防護 | 擋快捷鍵 + DevTools 偵測（不用 debugger 陷阱避免誤傷 Raymond） | 2026-04-20 |
+| 可混淆 vs 不可混淆 | 自家 JS 全混淆；Firebase SDK / html2canvas 等第三方不混淆 | 2026-04-20 |
 
 ---
 
