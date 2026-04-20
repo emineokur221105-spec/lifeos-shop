@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LifeOS Admin</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #222;
+    --panel-2: #2a2a2a;
+    --border: #333;
+    --text: #eee;
+    --muted: #999;
+    --ok: #27ae60;
+    --warn: #f39c12;
+    --err: #e74c3c;
+    --blue: #3498db;
+    --gold: #ffd700;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Noto Sans TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 { color: var(--ok); margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: var(--gold);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .btn {
+    background: var(--blue);
+    color: #fff;
+    border: 0;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn.ok { background: var(--ok); }
+  .btn.warn { background: var(--warn); color: #111; }
+  .btn.err { background: var(--err); }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    padding: 10px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td code { background: var(--panel-2); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--gold); }
+  tr.empty td { text-align: center; color: var(--muted); padding: 30px; }
+  .row-actions { white-space: nowrap; display: flex; gap: 6px; }
+  .form-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 12px 14px;
+    align-items: start;
+    margin-bottom: 14px;
+  }
+  .form-grid label { color: var(--muted); font-size: 13px; padding-top: 8px; }
+  .form-grid input,
+  .form-grid textarea {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .form-grid textarea { font-family: "SF Mono", Menlo, Consolas, monospace; resize: vertical; min-height: 100px; }
+  .form-grid .field-hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .form-actions { display: flex; gap: 10px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--border); }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--panel-2);
+    border-left: 4px solid var(--blue);
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .2s, transform .2s;
+    pointer-events: none;
+    max-width: 320px;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.err { border-left-color: var(--err); color: #ff8a80; }
+  .hidden { display: none !important; }
+  .loading-full {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 60vh; color: var(--muted);
+  }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #444;
+    border-top-color: var(--warn);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>LifeOS Admin</h1>
+  <p class="subtitle">租戶 &amp; 白名單管理後台</p>
+  <div id="app"><div class="loading-full"><span class="spinner"></span>啟動中...</div></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+  // ---- 0. 登入檢查 ----
+  const params = new URLSearchParams(location.search);
+  if (params.get('admin') !== '0308') {
+    document.documentElement.innerHTML =
+      '<body style="background:#1a1a1a;color:#eee;font-family:-apple-system,sans-serif;' +
+      'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">' +
+      '<div style="text-align:center;"><h1 style="color:#e74c3c;">⚠ 存取被拒</h1>' +
+      '<p>Admin 需要正確的入口參數</p></div></body>';
+    throw new Error('admin key required');
+  }
+
+  // ---- 1. 載入依賴 ----
+  await import('./core/security.js');
+  const fbDb = await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js');
+  const { mainDb } = await import('./core/main-firebase-config.js');
+
+  // ---- 2. 防盜（寬鬆版：白名單空時不擋，方便首次設定）----
+  try {
+    const snap = await fbDb.get(fbDb.ref(mainDb, 'whitelist'));
+    const raw = snap.val() || {};
+    const hashes = Object.keys(raw);
+    if (hashes.length > 0) {
+      await window.LifeOSSecurity.init({ allowedHashes: hashes });
+    } else {
+      // 白名單空 → 只裝按鍵攔截（沒有 hostname 檢查）
+      // LifeOSSecurity.init 內部 checkHostname 遇到空陣列會 blockPage，所以這裡手動呼叫公開的 API
+      // 沒 export installKeyBlocker，暫時跳過（首次設定完白名單後刷新即可生效）
+      console.warn('[Admin] 白名單為空，暫時略過 hostname 檢查');
+    }
+  } catch (e) {
+    console.error('[Admin] 防盜初始化失敗', e);
+  }
+
+  // ---- 3. Toast ----
+  const toastEl = document.getElementById('toast');
+  let toastTimer = null;
+  function toast(msg, kind) {
+    toastEl.className = 'toast ' + (kind || '') + ' show';
+    toastEl.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  // ---- 4. 狀態 ----
+  const state = {
+    tenants: {},   // { code: { name, firebaseConfig, defaults } }
+    whitelist: {}, // { hash: true | { label } }
+    editingTenant: null // null | { code, isNew, draft }
+  };
+
+  // ---- 5. Firebase 操作 ----
+  async function loadAll() {
+    const [tSnap, wSnap] = await Promise.all([
+      fbDb.get(fbDb.ref(mainDb, 'tenants')),
+      fbDb.get(fbDb.ref(mainDb, 'whitelist'))
+    ]);
+    state.tenants = tSnap.val() || {};
+    state.whitelist = wSnap.val() || {};
+  }
+
+  async function saveTenant(code, data) {
+    await fbDb.set(fbDb.ref(mainDb, 'tenants/' + code), data);
+  }
+  async function deleteTenant(code) {
+    await fbDb.remove(fbDb.ref(mainDb, 'tenants/' + code));
+  }
+  async function addWhitelist(hostname, label) {
+    const hash = await window.LifeOSSecurity.sha256(hostname.toLowerCase());
+    await fbDb.set(fbDb.ref(mainDb, 'whitelist/' + hash), { label: label || hostname });
+    return hash;
+  }
+  async function deleteWhitelist(hash) {
+    await fbDb.remove(fbDb.ref(mainDb, 'whitelist/' + hash));
+  }
+
+  // ---- 6. 渲染 ----
+  const app = document.getElementById('app');
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function render() {
+    app.innerHTML = renderTenantsPanel() + renderWhitelistPanel();
+    bindEvents();
+  }
+
+  function renderTenantsPanel() {
+    const editing = state.editingTenant;
+    const codes = Object.keys(state.tenants).sort();
+    const rows = codes.length === 0
+      ? '<tr class="empty"><td colspan="4">尚無租戶，點右上「新增租戶」</td></tr>'
+      : codes.map(code => {
+          const t = state.tenants[code] || {};
+          const pid = (t.firebaseConfig && t.firebaseConfig.projectId) || '—';
+          return '<tr>' +
+            '<td><code>' + esc(code) + '</code></td>' +
+            '<td>' + esc(t.name || '') + '</td>' +
+            '<td><code>' + esc(pid) + '</code></td>' +
+            '<td class="row-actions">' +
+              '<button class="btn small" data-act="tenant-edit" data-code="' + esc(code) + '">編輯</button>' +
+              '<button class="btn small err" data-act="tenant-del" data-code="' + esc(code) + '">刪除</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+
+    const editor = editing ? renderTenantEditor(editing) : '';
+
+    return '<div class="panel">' +
+      '<h2>🏢 租戶清單' +
+        (editing ? '' : '<button class="btn ok small" data-act="tenant-new">➕ 新增租戶</button>') +
+      '</h2>' +
+      (editing ? editor : (
+        '<table>' +
+          '<thead><tr><th>代號</th><th>名稱</th><th>Firebase projectId</th><th style="width:130px;">動作</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>'
+      )) +
+    '</div>';
+  }
+
+  function renderTenantEditor(editing) {
+    const d = editing.draft || {};
+    const cfgStr = d.firebaseConfig ? JSON.stringify(d.firebaseConfig, null, 2) : '';
+    const defStr = d.defaults ? JSON.stringify(d.defaults, null, 2) : '';
+    return '<div class="form-grid">' +
+      '<label>代號 *</label>' +
+      '<div>' +
+        '<input id="f-code" value="' + esc(editing.code || '') + '" ' +
+          (editing.isNew ? '' : 'readonly disabled') + ' placeholder="例：demo / qinre-main">' +
+        '<div class="field-hint">英數字、底線、連字符；作為 URL 的 <code>?t=</code> 值。建好後不能改。</div>' +
+      '</div>' +
+      '<label>名稱</label>' +
+      '<input id="f-name" value="' + esc(d.name || '') + '" placeholder="顯示用名稱（可中文）">' +
+      '<label>Firebase Config (JSON) *</label>' +
+      '<div>' +
+        '<textarea id="f-config" rows="9" placeholder=\'{ "apiKey": "...", "authDomain": "...", "databaseURL": "...", "projectId": "...", ... }\'>' + esc(cfgStr) + '</textarea>' +
+        '<div class="field-hint">整包貼 Firebase console → 專案設定 → 你的應用程式 → 設定 的物件。</div>' +
+      '</div>' +
+      '<label>預設參數 (JSON)</label>' +
+      '<div>' +
+        '<textarea id="f-defaults" rows="5" placeholder="{}">' + esc(defStr) + '</textarea>' +
+        '<div class="field-hint">可留空；未來給 shop.html 首次初始化用。</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="form-actions">' +
+      '<button class="btn ghost" data-act="tenant-cancel">取消</button>' +
+      '<button class="btn ok" data-act="tenant-save">儲存</button>' +
+    '</div>';
+  }
+
+  function renderWhitelistPanel() {
+    const hashes = Object.keys(state.whitelist);
+    const rows = hashes.length === 0
+      ? '<tr class="empty"><td colspan="3">尚無授權網域（此時任何 hostname 都會被擋，但 localhost 放行）</td></tr>'
+      : hashes.map(h => {
+          const v = state.whitelist[h];
+          const label = (v && typeof v === 'object' && v.label) ? v.label : '—';
+          return '<tr>' +
+            '<td>' + esc(label) + '</td>' +
+            '<td><code style="font-size:11px;word-break:break-all;">' + esc(h) + '</code></td>' +
+            '<td class="row-actions">' +
+              '<button class="btn small err" data-act="wl-del" data-hash="' + esc(h) + '">刪除</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+
+    return '<div class="panel">' +
+      '<h2>🔒 Hostname 白名單</h2>' +
+      '<div class="form-grid" style="grid-template-columns:140px 1fr 1fr auto;">' +
+        '<label>新增網域</label>' +
+        '<input id="wl-host" placeholder="例：emineokur221105-spec.github.io">' +
+        '<input id="wl-label" placeholder="標籤（可選，方便辨識）">' +
+        '<button class="btn ok" data-act="wl-add">加入白名單</button>' +
+      '</div>' +
+      '<table>' +
+        '<thead><tr><th style="width:30%;">標籤</th><th>SHA-256 Hash</th><th style="width:100px;">動作</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+      '<div class="field-hint" style="margin-top:10px;">' +
+        '⚠ Hash 無法反查。刪除前請確認標籤正確；刪到自己用的網域會被擋出系統（可從 localhost 進來修）。' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ---- 7. 事件 ----
+  function bindEvents() {
+    app.querySelectorAll('[data-act]').forEach(el => {
+      el.addEventListener('click', onAction);
+    });
+  }
+
+  async function onAction(e) {
+    const btn = e.currentTarget;
+    const act = btn.dataset.act;
+    try {
+      if (act === 'tenant-new') {
+        state.editingTenant = { code: '', isNew: true, draft: {} };
+        render();
+      }
+      else if (act === 'tenant-edit') {
+        const code = btn.dataset.code;
+        state.editingTenant = { code, isNew: false, draft: JSON.parse(JSON.stringify(state.tenants[code] || {})) };
+        render();
+      }
+      else if (act === 'tenant-cancel') {
+        state.editingTenant = null;
+        render();
+      }
+      else if (act === 'tenant-save') {
+        await handleTenantSave();
+      }
+      else if (act === 'tenant-del') {
+        const code = btn.dataset.code;
+        if (!confirm('確定刪除租戶「' + code + '」？\n\n這不會動到該租戶自己的 Firebase 資料，只會從主清單移除。')) return;
+        await deleteTenant(code);
+        toast('已刪除 ' + code, 'ok');
+        await loadAll();
+        render();
+      }
+      else if (act === 'wl-add') {
+        await handleWhitelistAdd();
+      }
+      else if (act === 'wl-del') {
+        const hash = btn.dataset.hash;
+        if (!confirm('確定刪除這組白名單？\n\n若是當前網域，重整後會被擋出系統。')) return;
+        await deleteWhitelist(hash);
+        toast('已從白名單移除', 'ok');
+        await loadAll();
+        render();
+      }
+    } catch (err) {
+      console.error(err);
+      toast('操作失敗：' + (err.message || err), 'err');
+    }
+  }
+
+  async function handleTenantSave() {
+    const code = document.getElementById('f-code').value.trim();
+    const name = document.getElementById('f-name').value.trim();
+    const cfgRaw = document.getElementById('f-config').value.trim();
+    const defRaw = document.getElementById('f-defaults').value.trim();
+
+    if (!code) { toast('代號必填', 'err'); return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(code)) { toast('代號只能用英數字 / 底線 / 連字符', 'err'); return; }
+    if (!cfgRaw) { toast('Firebase config 必填', 'err'); return; }
+
+    let firebaseConfig, defaults;
+    try {
+      firebaseConfig = JSON.parse(cfgRaw);
+    } catch (e) {
+      toast('Firebase config 不是合法 JSON', 'err'); return;
+    }
+    if (!firebaseConfig.projectId || !firebaseConfig.databaseURL) {
+      toast('Firebase config 缺少 projectId 或 databaseURL', 'err'); return;
+    }
+    if (defRaw) {
+      try { defaults = JSON.parse(defRaw); }
+      catch (e) { toast('預設參數不是合法 JSON', 'err'); return; }
+    } else {
+      defaults = {};
+    }
+
+    const editing = state.editingTenant;
+    if (editing.isNew && state.tenants[code]) {
+      if (!confirm('代號「' + code + '」已存在，要覆蓋嗎？')) return;
+    }
+
+    await saveTenant(code, { name, firebaseConfig, defaults });
+    toast('已儲存 ' + code, 'ok');
+    state.editingTenant = null;
+    await loadAll();
+    render();
+  }
+
+  async function handleWhitelistAdd() {
+    const host = document.getElementById('wl-host').value.trim().toLowerCase();
+    const label = document.getElementById('wl-label').value.trim();
+    if (!host) { toast('請輸入網域', 'err'); return; }
+    const hash = await addWhitelist(host, label);
+    toast('已加入：' + host, 'ok');
+    document.getElementById('wl-host').value = '';
+    document.getElementById('wl-label').value = '';
+    await loadAll();
+    render();
+  }
+
+  // ---- 8. 啟動 ----
+  await loadAll();
+  render();
+</script>
+</body>
+</html>

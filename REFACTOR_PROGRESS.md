@@ -48,11 +48,11 @@
   - [x] `security.js`（統一防盜模組）2026-04-20
   - [ ] `common.js`（共用工具：showToast、parseTime 等）
 - [x] 新 `index.html`（路由骨架：`?t=`/`?admin=` 分流，串 security + tenant-loader）2026-04-20
-- [ ] Admin 後台 `admin.html`
-  - [ ] 登入檢查（`?admin=0308`）
-  - [ ] 租戶清單 CRUD
-  - [ ] 每個租戶的 Firebase config 編輯表單
-  - [ ] 預設參數編輯表單
+- [x] Admin 後台 `admin.html` 2026-04-20
+  - [x] 登入檢查（`?admin=0308`）
+  - [x] 租戶清單 CRUD（新增/編輯/刪除，JSON 貼 Firebase config）
+  - [x] 白名單管理（輸入 hostname → 算 SHA-256 → 存 `{ label }`）
+  - [x] Toast 提示 + 二次確認刪除
 
 ### Phase 2：模組移植（待開始）
 - [ ] `shop.html`（最大、最核心）
@@ -77,11 +77,16 @@
 最後更新：2026-04-20 Asia/Taipei
 
 **剛完成（2026-04-20）：**
+- `src/admin.html`：Admin 後台
+  - 登入檢查 `?admin=0308`
+  - 租戶區塊：列表（代號 / 名稱 / projectId）、新增、編輯、刪除、JSON 驗證（必填 projectId + databaseURL）
+  - 白名單區塊：輸入網域 + 標籤 → 算 SHA-256 → 存 `/whitelist/<hash>: { label }`；列表顯示標籤 + hash
+  - 白名單空時暫時略過 hostname 檢查（方便首次設定），設定完刷新即啟用
+  - Toast 提示、二次確認刪除
 - `src/index.html`：從測試殼改寫成正式入口路由（ES module）
-  - `?admin=0308` → redirect 到 `admin.html`（admin.html 尚未建，此路徑先備著）
-  - `?t=<代號>` → 動態 import security + tenant-loader → loadWhitelist → security.init → loadTenant → 目前顯示「租戶已載入」（Phase 2 完成後改 redirect 到 shop.html）
+  - `?admin=0308` → redirect 到 `admin.html`
+  - `?t=<代號>` → 動態 import security + tenant-loader → loadWhitelist → security.init → loadTenant → 顯示「租戶已載入」（Phase 2 完成後改 redirect 到 shop.html）
   - 無參數 → 顯示首頁提示
-  - 深色背景 + spinner + 錯誤顯示
 - 刪除 `src/boot.js`（pipeline 測試殼，邏輯已整合進 index.html）
 
 **之前完成：**
@@ -98,9 +103,10 @@
   └── defaults (object)
 ```
 
-**下一步（Phase 1 剩餘）：**
-1. 寫 `src/admin.html` Admin 後台（登入檢查 + 租戶 CRUD + 白名單管理）
-2. `common.js` 等移植 shop.html 時再依需求補
+**下一步：Phase 1 基本上完成 → 準備進 Phase 2**
+- Raymond 線上測試 admin.html：用 `?admin=0308` 進後台 → 加白名單（先加 `localhost` 免得鎖死，再加 `emineokur221105-spec.github.io`）→ 建第一個租戶
+- Phase 2 開頭：shop.html 移植（最大工程，改 Firebase SDK v8 → v11 modular + 接 tenant-loader）
+- `common.js` 等 shop.html 移植時依需求補
 
 ---
 
