@@ -60,6 +60,16 @@
   - 租戶層（價格、工數、員工）→ 各自的租戶 Firebase
   - 目前 settings 寫入租戶 Firebase 的 `system_config`，對應後要釐清
 
+## 🗂 localStorage 跨租戶污染
+
+- **[P2] localStorage key 加租戶 namespace**
+  - 多個設定目前都存 `localStorage`，例如：
+    - `roster.html` 的 `myFooter`（自訂頁尾警語）
+    - `shop/app.js` 的 `appZoomLevel`（UI 縮放）
+  - 同一瀏覽器開不同租戶會互相覆蓋
+  - 修法：key 加租戶前綴（例：`t:<code>:myFooter`），或寫 `storage.js` 小工具讀取當前租戶 code 包裝
+  - 對單租戶單一老闆影響不大，開始分租給同行時要修
+
 ## 📱 使用體驗
 
 - **[P3] PWA 強化**

@@ -583,7 +583,10 @@
         localStorage.setItem('myFooter', document.getElementById('setting-footer').value);
         showToast('✅ 設定已儲存'); window.closeSettings();
     };
-    window.onload = () => { setupAutoSave(); window.createNewMember(); };
+    // LifeOS 統一版：module + await bootTenant 可能跑完時 load 事件早已觸發
+    // 直接呼叫即可（module 自帶 defer，DOM 已 ready）
+    setupAutoSave();
+    window.createNewMember();
 </script>
 
 </body>

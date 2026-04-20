@@ -478,15 +478,22 @@ window.applyZoom = function(scaleValue) {
     }
 };
 
-// 🌟 新增：網頁載入時，自動讀取上次設定的縮放比例
-window.addEventListener('DOMContentLoaded', () => {
+// 🌟 網頁載入時，自動讀取上次設定的縮放比例
+// LifeOS 統一版：此檔由 shop.html 動態 appendChild 載入，載入時 DOMContentLoaded 可能早已觸發
+// 所以用 readyState 判斷，已完成就直接跑
+function __applySavedZoom() {
     const savedZoom = localStorage.getItem('appZoomLevel') || "1";
     const zoomSelect = document.getElementById('uiZoomSelect');
     if (zoomSelect) {
         zoomSelect.value = savedZoom;
     }
     applyZoom(savedZoom);
-});
+}
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', __applySavedZoom);
+} else {
+    __applySavedZoom();
+}
 
 // ==========================================
 // 🌟 新增：個別房間卡片的「重置」功能

@@ -52,13 +52,13 @@
   - 預設 `MINIFY_HTML_INLINE=true`（緊急可設 `=0` 關閉）
   - 6 個 HTML（admin/index/office/roster/settings/shop/weekly）全部混淆通過，關鍵屬性名保留
 
-### Phase 1：核心架構（進行中）
+### Phase 1：核心架構（完成）
 - [x] Raymond 開「主 Firebase」project：`lifeos-shop-main`（config 存 LOCAL_SECRETS.md）
 - [ ] 建 `core/` 資料夾
   - [x] `main-firebase-config.js`（主 Firebase 連線設定）2026-04-20
   - [x] `tenant-loader.js`（讀 `?t=xxx` 查租戶 Firebase 設定）2026-04-20
   - [x] `security.js`（統一防盜模組）2026-04-20
-  - [ ] `common.js`（共用工具：showToast、parseTime 等）
+  - [x] `common.js`（showToast / escapeHtml / formatDate / debounce / copyText / lsKey 租戶 namespace）2026-04-20
 - [x] 新 `index.html`（路由骨架：`?t=`/`?admin=` 分流，串 security + tenant-loader）2026-04-20
 - [x] Admin 後台 `admin.html` 2026-04-20
   - [x] 登入檢查（`?admin=0308`）
@@ -66,7 +66,7 @@
   - [x] 白名單管理（輸入 hostname → 算 SHA-256 → 存 `{ label }`）
   - [x] Toast 提示 + 二次確認刪除
 
-### Phase 2：模組移植（進行中）
+### Phase 2：模組移植（完成）
 - [x] `src/core/tenant-boot.js`：頁面共用開機（驗白名單 + 載租戶）2026-04-20
 - [x] `roster.html`（人員雲端管理）2026-04-20
   - [x] 搬檔到 `src/roster.html`，原 UI / 邏輯 598 行完全保留
@@ -105,19 +105,28 @@
   - [x] `admin.html` 租戶清單每行加「⚙️ 設定」按鈕（`<a target="_blank">` 開 `settings.html?t=<代號>`），動作欄寬度 130px → 220px
 - [x] 改寫 `index.html` 成租戶功能選單（深色版保留舊版 4 按鈕漸層色，roster 可點、shop/office/weekly 顯示「移植中」disabled）2026-04-20
 
-### Phase 3：驗收（待開始）
+### Phase 3：驗收（進行中）
+- [x] **Claude 自我健檢（2026-04-20）**：掃 core 4 檔 + 7 個 HTML + shop_data/*.js，找到 2 個 bug，已修
+  - `roster.html:586` 把 `window.onload = () => {...}` 改直接呼叫（module + await bootTenant 會錯過 load 事件）
+  - `shop/shop_data/app.js:482` 的 `DOMContentLoaded` 改用 readyState 判斷（shop.html 動態載入此檔時 DOMContentLoaded 可能早觸發）
+  - 追加 FUTURE_IMPROVEMENTS：localStorage 跨租戶污染（P2）
 - [ ] Raymond 實際操作確認 UI 一模一樣
-- [ ] 修 bug
+- [ ] 修 bug（如有）
 - [ ] 寫「新增租客 SOP」
 
 ---
 
 ## 📝 當前進度
 
-**Phase 1 進行中**
+**Phase 3 進行中（自我健檢完成，等 Raymond 驗收）**
 最後更新：2026-04-20 Asia/Taipei
 
-**剛完成（2026-04-20）：**
+**剛完成（2026-04-20 晚）：Claude 自我健檢**
+- 掃過全部 src/ 檔案，確認所有 `bootTenant` 整合點都正確
+- 修 2 個 race condition bug（見 Phase 3 區塊）
+- 下次開工請先請 Raymond 實際點一輪網站驗收
+
+**之前完成（2026-04-20）：**
 - `src/admin.html`：Admin 後台
   - 登入檢查 `?admin=0308`
   - 租戶區塊：列表（代號 / 名稱 / projectId）、新增、編輯、刪除、JSON 驗證（必填 projectId + databaseURL）
@@ -150,10 +159,18 @@
   - 沒 ?t= 會跳回首頁；有 ?t= 但租戶不存在會顯示錯誤頁
   - 載入順序：bootTenant → `window.TENANT_FIREBASE_CONFIG` → v8 compat init → config/utils/schedule/settlement/app/weekly 依序載入
 
+**剛完成（2026-04-20 晚）：收尾三件事**
+- `src/core/common.js`：showToast / escapeHtml / formatDate / getISOWeekString / debounce / copyText / getCurrentTenant / lsKey
+  - 輕量零依賴，各頁要用再 import，不強迫重構現有 inline toast 實作
+  - `lsKey()` 提供租戶 namespace 封裝，之後要改 localStorage 就用這個避免跨租戶覆蓋
+- `SETUP_GUIDE.md` 大改寫：補上完整「新增租客 SOP」，5 小步（開 Firebase → admin 加租戶 → 白名單 → settings 設參數 → 交網址）
+- `現況與未來.txt` 更新成最新狀態（shop/settings 已完成、加上驗收清單）
+
 **下一步：**
-1. `common.js` 等有需求再補（目前沒迫切需要）
-2. Phase 3 驗收：kabe 實際操作確認 UI 一模一樣，修 bug
-3. 未來做：shop_data/*.js 逐檔改成 v11 modular（FUTURE_IMPROVEMENTS P1）
+1. **kabe 實際驗收**：依 `現況與未來.txt` 二、驗收清單 點一輪
+2. 有 bug 回報 → Claude 修完再驗一次
+3. 驗收通過 → 開始接客戶（參考 SETUP_GUIDE.md Step 2）
+4. 未來升級（非緊急）：shop_data/*.js 逐檔改 v11 modular（FUTURE_IMPROVEMENTS P1）
 
 **settings.html 測試方式：**
 - 正常入口：admin 後台租戶清單 → 點「⚙️ 設定」→ 新分頁打開 `settings.html?t=<代號>`

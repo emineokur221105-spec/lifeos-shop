@@ -1,0 +1,132 @@
+LifeOS-Shop 統一版  現況與未來
+更新時間：2026-04-20 晚
+
+=================================
+一、現在做到哪（全綠、可以驗收）
+=================================
+
+入口：https://emineokur221105-spec.github.io/lifeos-shop/
+
+【完成度】
+Phase 0（基礎設施）       ✅ 完成
+Phase 0.5（安全與混淆）    ✅ 完成（HTML 內嵌 script 混淆也開著了）
+Phase 1（核心架構）        ✅ 完成（core/ 底下 4 個檔齊全）
+Phase 2（模組移植）        ✅ 完成（7 個頁面全部搬完）
+Phase 3（驗收）            🟡 等 Raymond 實際操作
+
+【已上線、測過會動的頁面】
+1. 首頁 index.html            → 驗證租戶 + 四個功能按鈕
+2. Admin 後台 admin.html      → ?admin=0308 進入
+                                 租戶 CRUD、白名單 CRUD、每行「⚙️ 設定」直達 settings
+3. roster.html 人員雲端管理    → 統一版已接 bootTenant + 租戶 Firebase
+4. office.html 團隊分紅       → 統一版已接 bootTenant + 租戶 Firebase
+5. weekly.html 週結業績       → 從 v8 全面改寫成 v11 modular
+6. shop.html 門店排班         → 方案 C：外殼接統一版，內部 6 個 shop_data/*.js 維持 v8 compat
+7. settings.html 系統設定      → 方案 C：隱藏頁，從 admin 租戶清單點「⚙️ 設定」進入
+
+【core/ 資料夾（共用模組）】
+- main-firebase-config.js  主 Firebase 連線
+- tenant-loader.js         讀租戶清單與白名單
+- security.js              三層防盜（白名單 / F12 攔截 / DevTools 偵測）
+- tenant-boot.js           各頁共用開機流程
+- common.js                小工具（toast/escapeHtml/formatDate/debounce/copyText 等）
+
+【架構設計】
+- 雙層 Firebase：
+  主 Firebase (lifeos-shop-main) 存租戶清單 + 白名單 hash
+  每個門店自己一個 Firebase 存營運資料
+- 網址 ?t=代號    決定載哪個租戶
+- 網址 ?admin=0308   進後台（不從首頁連過去）
+- 白名單：hostname 算 SHA-256，比對雲端才放行（localhost 自動跳過）
+
+【混淆現狀】
+- 獨立 .js 檔（core/*.js、shop_data/*.js）：terser 壓縮中
+- HTML 內嵌 <script>：也進混淆流程（預設開著，MINIFY_HTML_INLINE=0 可關）
+- Firebase SDK / html2canvas 等第三方：不混淆，保持原檔
+
+=================================
+二、驗收清單（給 Raymond 本人）
+=================================
+
+請你依序打開、點一輪，發現哪裡怪就截圖給 Claude：
+
+□ 1. 首頁（沒帶參數）
+     https://emineokur221105-spec.github.io/lifeos-shop/
+     → 應該顯示「系統需要從租戶連結進入」提示
+
+□ 2. Admin 後台
+     https://emineokur221105-spec.github.io/lifeos-shop/?admin=0308
+     → 租戶清單看得到、白名單看得到
+
+□ 3. 租戶入口
+     https://emineokur221105-spec.github.io/lifeos-shop/?t=<你的代號>
+     → 載入後出現四個功能按鈕，點每一個進去
+
+□ 4. roster（人員雲端管理）
+     → 新增一個人、改名字、拖曳排序、複製詳細版 / 精簡版
+     → 移到離職 → 切離職名單看到 → 復職
+
+□ 5. office（團隊分紅）
+     → 改收入、加/移除支出、改分紅比例
+     → 截圖下載「財務報表(黑)」
+
+□ 6. weekly（週結業績）
+     → 貼一段業績 → 自動跑出報表
+     → 切週次、複製 Excel 總表
+     → 帳戶清單 CRUD
+
+□ 7. shop（門店排班，最複雜）
+     → 新增區域、新增人員、拖曳排班
+     → 切日結 → 算錢看對不對
+     → 切週結 → 結算當週
+
+□ 8. settings（從 admin 租戶清單點「⚙️ 設定」）
+     → 改價格表、工數表、阿姨名單
+     → 測匯出 JSON / 匯入 JSON
+
+=================================
+三、還沒做 / 等你確認
+=================================
+
+【驗收之後】
+- 如有 bug 回報 → Claude 修
+- 無 bug 即可開始接客戶（參考 SETUP_GUIDE.md Step 2）
+
+【未來升級（非緊急，見 FUTURE_IMPROVEMENTS.md）】
+- shop.html 的 7 個 v8 compat 檔逐步改 v11 modular（P1）
+- Admin 密碼從 ?admin=0308 升級為 Firebase Auth 登入（P2）
+- localStorage 加租戶 namespace（P2，多租戶共用瀏覽器才會踩到）
+- 統一 CSS / 導航列（P2）
+- 兩套週結系統整併（P2，商業決策）
+
+=================================
+四、重要檔案在哪
+=================================
+
+專案根目錄：C:\Users\makeo\Desktop\Claude\LifeOS-Shop-統一版\
+
+- REFACTOR_PROGRESS.md  每次開新對話 Claude 必讀的進度本
+- SETUP_GUIDE.md        你用的操作手冊 + 新增租客 SOP
+- FUTURE_IMPROVEMENTS.md 技術欠債與升級清單
+- LOCAL_SECRETS.md      主 Firebase config（gitignore 不上雲）
+- src/                  原始碼（在 git 裡、你手改的地方）
+- src/core/             共用模組（防盜、租戶載入、小工具）
+- dist/                 混淆後（gitignore，GitHub Actions 自動生）
+- build.js              本機混淆腳本
+- 一鍵部署.bat          雙擊就自動 build + commit + push
+
+GitHub repo：https://github.com/emineokur221105-spec/lifeos-shop
+線上網址：    https://emineokur221105-spec.github.io/lifeos-shop/
+
+=================================
+五、工作哲學（給未來的你/Claude 看）
+=================================
+
+1. 先求有，再求好
+   能動比漂亮重要。試做東西爆了就先回滾，之後再 debug。
+2. 做完一小步立刻記錄
+   避免 token 用完忘記做到哪。每步 commit + 更新 REFACTOR_PROGRESS.md。
+3. UI 一模一樣
+   不擅自改樣式、改操作流程（Raymond 用慣了）。
+4. 告訴 Raymond 用白話文
+   他是非工程師，術語要翻譯。
