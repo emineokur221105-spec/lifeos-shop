@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚙️ 系統設定</title>
+    <!-- Firebase v8 compat SDK（保留原本 settings 邏輯） -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <!-- 開機流程：白名單驗證 + 載入租戶 Firebase config -->
+    <script type="module">
+      import { bootTenant } from './core/tenant-boot.js';
+      try {
+        const tenant = await bootTenant();
+        window.TENANT_FIREBASE_CONFIG = tenant.firebaseConfig;
+        window.TENANT_NAME = tenant.name;
+        window.TENANT_CODE = tenant.code;
+        document.title = `⚙️ 系統設定 - ${tenant.name}`;
+      } catch (e) {
+        console.error('[settings] 租戶開機失敗:', e);
+        document.body.innerHTML = `<div style="padding:40px;text-align:center;color:#c0392b;font-family:sans-serif;">
+          <h2>⚠️ 無法載入租戶資料</h2>
+          <p>${e.message || e}</p>
+          <p><a href="./" style="color:#3498db;">返回首頁</a></p>
+        </div>`;
+        throw e;
+      }
+      window.__TENANT_READY__ = true;
+      window.dispatchEvent(new Event('tenant-ready'));
+    </script>
+
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --success: #27ae60; --danger: #e74c3c; --warning: #f39c12; --bg: #f0f2f5; --card: #ffffff; --border: #e1e5eb; --text: #2c3e50; --text-light: #7f8c8d; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        /* === 頂部導航 === */
+        .top-bar { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .top-bar h1 { font-size: 20px; display: flex; align-items: center; gap: 8px; }
+        .top-bar-actions { display: flex; gap: 10px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #219a52; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-outline { background: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); }
+        .btn-outline:hover { background: rgba(255,255,255,0.1); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .btn-home { background: rgba(255,255,255,0.15); color: white; text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: bold; }
+        .btn-home:hover { background: rgba(255,255,255,0.25); }
+
+        /* === 主要內容 === */
+        .container { max-width: 900px; margin: 0 auto; padding: 24px 16px 80px; }
+
+        /* === 卡片 === */
+        .card { background: var(--card); border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--border); overflow: hidden; }
+        .card-header { padding: 16px 20px; font-size: 16px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; transition: background 0.2s; }
+        .card-header:hover { background: #f8f9fa; }
+        .card-header .icon { font-size: 20px; margin-right: 8px; }
+        .card-header .arrow { transition: transform 0.3s; font-size: 12px; color: var(--text-light); }
+        .card-header .arrow.open { transform: rotate(180deg); }
+        .card-body { padding: 0 20px 20px; }
+        .card.collapsed .card-body { display: none; }
+        .card-desc { font-size: 13px; color: var(--text-light); margin-bottom: 16px; line-height: 1.6; background: #f8f9fa; padding: 10px 14px; border-radius: 8px; border-left: 3px solid var(--accent); }
+
+        /* === 表單元素 === */
+        .form-group { margin-bottom: 14px; }
+        .form-label { display: block; font-size: 13px; font-weight: bold; color: var(--text-light); margin-bottom: 5px; }
+        .form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; transition: border-color 0.2s; font-family: inherit; }
+        .form-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(52,152,219,0.15); }
+        .form-input::placeholder { color: #bdc3c7; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        textarea.form-input { min-height: 80px; resize: vertical; font-family: "Consolas", "Courier New", monospace; font-size: 13px; }
+
+        /* === 動態表格 === */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .data-table th { background: #f1f3f5; padding: 10px 8px; text-align: center; font-size: 12px; color: var(--text-light); font-weight: bold; border-bottom: 2px solid var(--border); }
+        .data-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid #f1f3f5; }
+        .data-table input { width: 100%; padding: 8px 4px; border: 1px solid var(--border); border-radius: 6px; text-align: center; font-size: 14px; font-weight: bold; }
+        .data-table input:focus { border-color: var(--accent); outline: none; }
+        .data-table .col-comm input { color: var(--success); }
+        .data-table .col-cost input { color: var(--danger); }
+        .data-table .col-work input { color: #d35400; }
+        .btn-del-row { background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .btn-del-row:hover { color: var(--danger); background: #fdeaea; }
+        .btn-add-row { width: 100%; padding: 10px; border: 2px dashed var(--border); background: transparent; color: var(--text-light); border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; margin-top: 8px; transition: all 0.2s; }
+        .btn-add-row:hover { border-color: var(--accent); color: var(--accent); background: #eaf4fd; }
+
+        /* === Tags 輸入 === */
+        .tags-container { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; min-height: 44px; cursor: text; }
+        .tags-container:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(52,152,219,0.15); }
+        .tag { display: inline-flex; align-items: center; gap: 4px; background: #e8f4fd; color: var(--accent); padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: bold; }
+        .tag .tag-remove { cursor: pointer; font-size: 16px; color: #95a5a6; line-height: 1; }
+        .tag .tag-remove:hover { color: var(--danger); }
+        .tags-input { border: none; outline: none; font-size: 14px; min-width: 80px; flex: 1; font-family: inherit; }
+
+        /* === 股東卡片 === */
+        .shareholder-card { background: #f8f9fa; border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+        .shareholder-card input { padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-weight: bold; }
+        .shareholder-card .sh-name { flex: 1; }
+        .shareholder-card .sh-pct { width: 70px; text-align: center; color: var(--accent); }
+
+        /* === 支出項目 === */
+        .expense-item { display: grid; grid-template-columns: 100px 1fr 80px 100px 30px; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .expense-item select, .expense-item input { padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+
+        /* === Toast === */
+        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: #2c3e50; color: white; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; z-index: 9999; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 8px 25px rgba(0,0,0,0.3); pointer-events: none; }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* === 匯出匯入區 === */
+        .io-section { background: #f8f9fa; border: 1px dashed var(--border); border-radius: 10px; padding: 16px; margin-top: 16px; }
+        .io-section h4 { font-size: 14px; margin-bottom: 10px; }
+
+        /* === RWD === */
+        @media (max-width: 600px) {
+            .form-row, .form-row-3 { grid-template-columns: 1fr; }
+            .expense-item { grid-template-columns: 1fr; }
+            .top-bar { flex-direction: column; gap: 10px; }
+            .top-bar h1 { font-size: 17px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <h1><a href="#" id="homeLink" class="btn-home">🏠 首頁</a> ⚙️ 系統設定 <span id="tenantTag" style="font-size:13px; background:#f1c40f; color:#2c3e50; padding:2px 10px; border-radius:12px; margin-left:8px;"></span></h1>
+    <div class="top-bar-actions">
+        <button class="btn btn-outline" onclick="exportConfig()">📤 匯出設定</button>
+        <label class="btn btn-outline" style="cursor:pointer;">📥 匯入設定 <input type="file" accept=".json" onchange="importConfig(event)" style="display:none;"></label>
+        <button class="btn btn-success" onclick="saveAllSettings()">💾 儲存全部設定</button>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- 2. 系統安全 -->
+    <div class="card" id="card-security">
+        <div class="card-header" onclick="toggleCard('card-security')">
+            <span><span class="icon">🔑</span> 系統安全</span>
+            <span class="arrow open">▼</span>
+        </div>
+        <div class="card-body">
+            <div class="card-desc">設定「一鍵銷毀」功能的密碼。忘記密碼時可在此重設。</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">銷毀密碼</label>
+                    <input class="form-input" id="cfg_systemPassword" type="text" value="8888" placeholder="預設: 8888">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">預設經紀費率（$/工）</label>
+                    <input class="form-input" id="cfg_defaultAgentRate" type="number" value="300" placeholder="預設: 300">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 價格方案表 -->
+    <div class="card" id="card-pricing">
+        <div class="card-header" onclick="toggleCard('card-pricing')">
+            <span><span class="icon">💰</span> 價格方案表（底薪 / 底價 / 工數）</span>
+            <span class="arrow open">▼</span>
+        </div>
+        <div class="card-body">
+            <div class="card-desc">
+                每種服務方案的核心定價。<br>
+                <b>底薪（小姐拿）</b>= 小姐實際拿到的金額 ｜ <b>底價（扣成本）</b>= 公司的成本基準 ｜ <b>工數</b>= 計算經紀費的基準
+            </div>
+            <table class="data-table" id="pricingTable">
+                <thead>
+                    <tr>
+                        <th style="width:80px;">分鐘</th>
+                        <th style="width:60px;">次數</th>
+                        <th class="col-comm">底薪（小姐拿）</th>
+                        <th class="col-cost">底價（扣成本）</th>
+                        <th class="col-work" style="width:70px;">工數</th>
+                        <th style="width:40px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="pricingTableBody"></tbody>
+            </table>
+            <button class="btn-add-row" onclick="addPricingRow()">+ 新增價格方案</button>
+        </div>
+    </div>
+
+    <!-- 4. 工數對照表（fallback） -->
+    <div class="card" id="card-workunit">
+        <div class="card-header" onclick="toggleCard('card-workunit')">
+            <span><span class="icon">📊</span> 工數對照表（進階）</span>
+            <span class="arrow open">▼</span>
+        </div>
+        <div class="card-body">
+            <div class="card-desc">當班表出現「上表以外」的分鐘數時，系統用這張表當備用查詢。通常不需要改。</div>
+            <table class="data-table" id="workUnitTable">
+                <thead>
+                    <tr>
+                        <th>分鐘數</th>
+                        <th class="col-work">對應工數</th>
+                        <th style="width:40px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="workUnitTableBody"></tbody>
+            </table>
+            <button class="btn-add-row" onclick="addWorkUnitRow()">+ 新增對照</button>
+        </div>
+    </div>
+
+    <!-- 5. 阿姨帳規則 -->
+    <div class="card" id="card-aunt">
+        <div class="card-header" onclick="toggleCard('card-aunt')">
+            <span><span class="icon">👩</span> 阿姨帳規則</span>
+            <span class="arrow open">▼</span>
+        </div>
+        <div class="card-body">
+            <div class="card-desc">
+                阿姨帳計算：<code>(營收 - 底價 - 加值服務)</code> 再除以點數除數 = 阿姨點數。<br>
+                名單中的人額外加給指定金額後再算點數。
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">加給金額（元）</label>
+                    <input class="form-input" id="cfg_auntExtraAmount" type="number" value="100" placeholder="預設: 100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">點數除數</label>
+                    <input class="form-input" id="cfg_auntDivisor" type="number" value="100" placeholder="預設: 100">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">加給名單（按 Enter 新增）</label>
+                <div class="tags-container" id="auntTagsContainer" onclick="document.getElementById('auntTagsInput').focus()">
+                    <input class="tags-input" id="auntTagsInput" placeholder="輸入姓名後按 Enter...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. 排班顯示 -->
+    <div class="card" id="card-schedule">
+        <div class="card-header" onclick="toggleCard('card-schedule')">
+            <span><span class="icon">📅</span> 排班顯示設定</span>
+            <span class="arrow open">▼</span>
+        </div>
+        <div class="card-body">
+            <div class="card-desc">控制排班表的顯示參數。像素/分鐘 越大，時間軸越寬。</div>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label class="form-label">像素/分鐘 (px)</label>
+                    <input class="form-input" id="cfg_pxPerMin" type="number" value="2" placeholder="預設: 2">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">預設開門時間</label>
+                    <input class="form-input" id="cfg_defaultOpenHour" type="number" value="12" placeholder="預設: 12">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">預設關門時間</label>
+                    <input class="form-input" id="cfg_defaultCloseHour" type="number" value="26" placeholder="預設: 26">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. 分紅結算預設 -->
+    <div class="card" id="card-office">
+        <div class="card-header" onclick="toggleCard('card-office')">
+            <span><span class="icon">🏢</span> 分紅結算預設值</span>
+            <span class="arrow open">▼</span>
+        </div>
+        <div class="card-body">
+            <div class="card-desc">設定「分紅結算」頁面的預設股東名單與支出項目。新公司初次使用時會帶入這些預設值。</div>
+
+            <h4 style="font-size:14px; margin-bottom:10px; color:var(--primary);">👥 預設股東</h4>
+            <div id="shareholderList"></div>
+            <button class="btn-add-row" onclick="addShareholder()" style="margin-bottom:20px;">+ 新增股東</button>
+
+            <h4 style="font-size:14px; margin-bottom:10px; color:var(--primary);">💸 預設支出項目</h4>
+            <div style="display:grid; grid-template-columns: 100px 1fr 100px 30px; gap:8px; margin-bottom:8px; font-size:12px; color:var(--text-light); font-weight:bold; padding:0 4px;">
+                <span>類別</span><span>項目名稱</span><span>金額</span><span></span>
+            </div>
+            <div id="expenseList"></div>
+            <button class="btn-add-row" onclick="addExpense()">+ 新增支出項目</button>
+        </div>
+    </div>
+
+</div>
+
+<div class="toast" id="toast">已儲存！</div>
+
+<script>
+// ==========================================
+// 資料模型：預設值
+// ==========================================
+// 統一版：Firebase 連線由 admin 後台管，不在這裡編輯
+const DEFAULT_CONFIG = {
+    systemPassword: "8888",
+    defaultAgentRate: 300,
+    pxPerMin: 2,
+    defaultOpenHour: 12,
+    defaultCloseHour: 26,
+    pricingTable: [
+        { duration: 40, count: 1, comm: 1100, cost: 2300, work: 1 },
+        { duration: 60, count: 1, comm: 1400, cost: 2700, work: 1 },
+        { duration: 60, count: 2, comm: 1900, cost: 3300, work: 1 },
+        { duration: 120, count: 3, comm: 2800, cost: 4800, work: 2 },
+        { duration: 240, count: 3, comm: 4200, cost: 8100, work: 3 }
+    ],
+    workUnitTable: { "40": 1, "50": 1, "60": 1, "120": 2, "200": 3, "240": 3 },
+    auntExtraNames: ["顏同", "有菜", "澄澄", "姚貴", "曼達", "阿鳴", "鳴"],
+    auntExtraAmount: 100,
+    auntDivisor: 100,
+    officeShareholders: [
+        { name: "OG", percent: 67 },
+        { name: "C", percent: 28 },
+        { name: "黑", percent: 5 }
+    ],
+    officeExpenses: [
+        { type: "team", name: "做圖軟體月費", amount: 450 },
+        { type: "company", name: "公司房租代墊", amount: 26233 },
+        { type: "team", name: "團隊聚餐", amount: 1200 }
+    ]
+};
+
+// ==========================================
+// 狀態
+// ==========================================
+let currentConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+let auntTags = [];
+let db = null;
+
+// ==========================================
+// Firebase 初始化（使用 bootTenant 提供的租戶 config）
+// ==========================================
+function initFirebase() {
+    const config = window.TENANT_FIREBASE_CONFIG;
+    if (!config) {
+        throw new Error('❌ 租戶 Firebase 設定未載入，請從 index.html 透過 ?t=<代號> 進入');
+    }
+    if (!firebase.apps.length) {
+        firebase.initializeApp(config);
+    }
+    db = firebase.database();
+}
+
+// ==========================================
+// 系統設定（Firebase system_config）
+// ==========================================
+async function loadSystemConfig() {
+    try {
+        const snap = await db.ref('system_config').once('value');
+        const val = snap.val();
+        if (val) {
+            currentConfig = { ...DEFAULT_CONFIG, ...val };
+            // 確保陣列類型正確
+            if (!Array.isArray(currentConfig.pricingTable)) currentConfig.pricingTable = DEFAULT_CONFIG.pricingTable;
+            if (!Array.isArray(currentConfig.auntExtraNames)) currentConfig.auntExtraNames = DEFAULT_CONFIG.auntExtraNames;
+            if (!Array.isArray(currentConfig.officeShareholders)) currentConfig.officeShareholders = DEFAULT_CONFIG.officeShareholders;
+            if (!Array.isArray(currentConfig.officeExpenses)) currentConfig.officeExpenses = DEFAULT_CONFIG.officeExpenses;
+        }
+    } catch(e) {
+        console.warn('讀取設定失敗，使用預設值:', e);
+    }
+    populateAllForms();
+}
+
+function populateAllForms() {
+    // 基本設定
+    document.getElementById('cfg_systemPassword').value = currentConfig.systemPassword || '8888';
+    document.getElementById('cfg_defaultAgentRate').value = currentConfig.defaultAgentRate || 300;
+    document.getElementById('cfg_pxPerMin').value = currentConfig.pxPerMin || 2;
+    document.getElementById('cfg_defaultOpenHour').value = currentConfig.defaultOpenHour || 12;
+    document.getElementById('cfg_defaultCloseHour').value = currentConfig.defaultCloseHour || 26;
+    document.getElementById('cfg_auntExtraAmount').value = currentConfig.auntExtraAmount || 100;
+    document.getElementById('cfg_auntDivisor').value = currentConfig.auntDivisor || 100;
+
+    // 價格表
+    renderPricingTable();
+    // 工數表
+    renderWorkUnitTable();
+    // 阿姨名單
+    auntTags = [...(currentConfig.auntExtraNames || [])];
+    renderAuntTags();
+    // 股東
+    renderShareholders();
+    // 支出
+    renderExpenses();
+}
+
+function collectAllSettings() {
+    const config = {};
+    config.systemPassword = document.getElementById('cfg_systemPassword').value.trim() || '8888';
+    config.defaultAgentRate = parseInt(document.getElementById('cfg_defaultAgentRate').value) || 300;
+    config.pxPerMin = parseInt(document.getElementById('cfg_pxPerMin').value) || 2;
+    config.defaultOpenHour = parseInt(document.getElementById('cfg_defaultOpenHour').value) || 12;
+    config.defaultCloseHour = parseInt(document.getElementById('cfg_defaultCloseHour').value) || 26;
+    config.auntExtraAmount = parseInt(document.getElementById('cfg_auntExtraAmount').value) || 100;
+    config.auntDivisor = parseInt(document.getElementById('cfg_auntDivisor').value) || 100;
+    config.auntExtraNames = [...auntTags];
+
+    // 價格表
+    config.pricingTable = [];
+    document.querySelectorAll('#pricingTableBody tr').forEach(tr => {
+        const inputs = tr.querySelectorAll('input');
+        if (inputs.length >= 5) {
+            config.pricingTable.push({
+                duration: parseInt(inputs[0].value) || 0,
+                count: parseInt(inputs[1].value) || 1,
+                comm: parseInt(inputs[2].value) || 0,
+                cost: parseInt(inputs[3].value) || 0,
+                work: parseInt(inputs[4].value) || 0
+            });
+        }
+    });
+
+    // 工數表
+    config.workUnitTable = {};
+    document.querySelectorAll('#workUnitTableBody tr').forEach(tr => {
+        const inputs = tr.querySelectorAll('input');
+        if (inputs.length >= 2) {
+            const dur = inputs[0].value.trim();
+            if (dur) config.workUnitTable[dur] = parseInt(inputs[1].value) || 0;
+        }
+    });
+
+    // 股東
+    config.officeShareholders = [];
+    document.querySelectorAll('.shareholder-card').forEach(card => {
+        const inputs = card.querySelectorAll('input');
+        if (inputs.length >= 2) {
+            config.officeShareholders.push({
+                name: inputs[0].value.trim() || '未命名',
+                percent: parseFloat(inputs[1].value) || 0
+            });
+        }
+    });
+
+    // 支出
+    config.officeExpenses = [];
+    document.querySelectorAll('.expense-item-row').forEach(row => {
+        const select = row.querySelector('select');
+        const inputs = row.querySelectorAll('input');
+        if (select && inputs.length >= 2) {
+            config.officeExpenses.push({
+                type: select.value,
+                name: inputs[0].value.trim(),
+                amount: parseInt(inputs[1].value) || 0
+            });
+        }
+    });
+
+    return config;
+}
+
+async function saveAllSettings() {
+    const config = collectAllSettings();
+    try {
+        await db.ref('system_config').set(config);
+        currentConfig = config;
+        showToast('✅ 所有設定已儲存到雲端！');
+    } catch(e) {
+        showToast('❌ 儲存失敗: ' + e.message);
+    }
+}
+
+// ==========================================
+// 價格方案表
+// ==========================================
+function renderPricingTable() {
+    const tbody = document.getElementById('pricingTableBody');
+    tbody.innerHTML = currentConfig.pricingTable.map((row, i) => `
+        <tr>
+            <td><input type="number" value="${row.duration}" placeholder="分鐘"></td>
+            <td><input type="number" value="${row.count}" placeholder="次"></td>
+            <td class="col-comm"><input type="number" value="${row.comm}" placeholder="底薪"></td>
+            <td class="col-cost"><input type="number" value="${row.cost}" placeholder="底價"></td>
+            <td class="col-work"><input type="number" value="${row.work}" placeholder="工數"></td>
+            <td><button class="btn-del-row" onclick="this.closest('tr').remove()">×</button></td>
+        </tr>
+    `).join('');
+}
+
+function addPricingRow() {
+    const tbody = document.getElementById('pricingTableBody');
+    tbody.insertAdjacentHTML('beforeend', `
+        <tr>
+            <td><input type="number" placeholder="分鐘"></td>
+            <td><input type="number" value="1" placeholder="次"></td>
+            <td class="col-comm"><input type="number" value="0" placeholder="底薪"></td>
+            <td class="col-cost"><input type="number" value="0" placeholder="底價"></td>
+            <td class="col-work"><input type="number" value="1" placeholder="工數"></td>
+            <td><button class="btn-del-row" onclick="this.closest('tr').remove()">×</button></td>
+        </tr>
+    `);
+}
+
+// ==========================================
+// 工數對照表
+// ==========================================
+function renderWorkUnitTable() {
+    const tbody = document.getElementById('workUnitTableBody');
+    const table = currentConfig.workUnitTable || {};
+    tbody.innerHTML = Object.entries(table).map(([dur, work]) => `
+        <tr>
+            <td><input type="number" value="${dur}" placeholder="分鐘"></td>
+            <td class="col-work"><input type="number" value="${work}" placeholder="工數"></td>
+            <td><button class="btn-del-row" onclick="this.closest('tr').remove()">×</button></td>
+        </tr>
+    `).join('');
+}
+
+function addWorkUnitRow() {
+    const tbody = document.getElementById('workUnitTableBody');
+    tbody.insertAdjacentHTML('beforeend', `
+        <tr>
+            <td><input type="number" placeholder="分鐘"></td>
+            <td class="col-work"><input type="number" value="1" placeholder="工數"></td>
+            <td><button class="btn-del-row" onclick="this.closest('tr').remove()">×</button></td>
+        </tr>
+    `);
+}
+
+// ==========================================
+// 阿姨帳 Tags
+// ==========================================
+function renderAuntTags() {
+    const container = document.getElementById('auntTagsContainer');
+    const input = document.getElementById('auntTagsInput');
+    // 移除舊的 tag 元素
+    container.querySelectorAll('.tag').forEach(el => el.remove());
+    // 在 input 前面插入 tags
+    auntTags.forEach((name, i) => {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.innerHTML = `${name} <span class="tag-remove" onclick="removeAuntTag(${i})">×</span>`;
+        container.insertBefore(tag, input);
+    });
+}
+
+function removeAuntTag(index) {
+    auntTags.splice(index, 1);
+    renderAuntTags();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('auntTagsInput');
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = input.value.trim();
+            if (val && !auntTags.includes(val)) {
+                auntTags.push(val);
+                renderAuntTags();
+            }
+            input.value = '';
+        }
+        if (e.key === 'Backspace' && !input.value && auntTags.length > 0) {
+            auntTags.pop();
+            renderAuntTags();
+        }
+    });
+});
+
+// ==========================================
+// 股東
+// ==========================================
+function renderShareholders() {
+    const container = document.getElementById('shareholderList');
+    container.innerHTML = (currentConfig.officeShareholders || []).map((sh, i) => `
+        <div class="shareholder-card">
+            <span style="font-size:18px;">👤</span>
+            <input class="form-input sh-name" value="${sh.name}" placeholder="姓名" style="flex:1;">
+            <input class="form-input sh-pct" type="number" value="${sh.percent}" placeholder="%" style="width:80px; text-align:center;">
+            <span style="color:var(--text-light);">%</span>
+            <button class="btn-del-row" onclick="this.closest('.shareholder-card').remove()">×</button>
+        </div>
+    `).join('');
+}
+
+function addShareholder() {
+    const container = document.getElementById('shareholderList');
+    container.insertAdjacentHTML('beforeend', `
+        <div class="shareholder-card">
+            <span style="font-size:18px;">👤</span>
+            <input class="form-input sh-name" value="" placeholder="姓名" style="flex:1;">
+            <input class="form-input sh-pct" type="number" value="0" placeholder="%" style="width:80px; text-align:center;">
+            <span style="color:var(--text-light);">%</span>
+            <button class="btn-del-row" onclick="this.closest('.shareholder-card').remove()">×</button>
+        </div>
+    `);
+}
+
+// ==========================================
+// 支出
+// ==========================================
+function renderExpenses() {
+    const container = document.getElementById('expenseList');
+    container.innerHTML = (currentConfig.officeExpenses || []).map((exp, i) => `
+        <div class="expense-item-row" style="display:grid; grid-template-columns:100px 1fr 100px 30px; gap:8px; margin-bottom:8px;">
+            <select style="padding:8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                <option value="team" ${exp.type === 'team' ? 'selected' : ''}>🔴 團隊</option>
+                <option value="company" ${exp.type === 'company' ? 'selected' : ''}>🔵 公司</option>
+            </select>
+            <input class="form-input" value="${exp.name}" placeholder="項目名稱" style="padding:8px;">
+            <input class="form-input" type="number" value="${exp.amount}" placeholder="金額" style="padding:8px; text-align:right;">
+            <button class="btn-del-row" onclick="this.closest('.expense-item-row').remove()">×</button>
+        </div>
+    `).join('');
+}
+
+function addExpense() {
+    const container = document.getElementById('expenseList');
+    container.insertAdjacentHTML('beforeend', `
+        <div class="expense-item-row" style="display:grid; grid-template-columns:100px 1fr 100px 30px; gap:8px; margin-bottom:8px;">
+            <select style="padding:8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                <option value="team">🔴 團隊</option>
+                <option value="company">🔵 公司</option>
+            </select>
+            <input class="form-input" value="" placeholder="項目名稱" style="padding:8px;">
+            <input class="form-input" type="number" value="0" placeholder="金額" style="padding:8px; text-align:right;">
+            <button class="btn-del-row" onclick="this.closest('.expense-item-row').remove()">×</button>
+        </div>
+    `);
+}
+
+// ==========================================
+// 匯出 / 匯入
+// ==========================================
+function exportConfig() {
+    const config = collectAllSettings();
+    const exportData = {
+        _exportDate: new Date().toISOString(),
+        _version: "2.0",
+        _tenant: window.TENANT_CODE || '',
+        systemConfig: config
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const tenantSuffix = window.TENANT_CODE ? `_${window.TENANT_CODE}` : '';
+    a.download = `系統設定備份${tenantSuffix}_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('📤 設定已匯出！');
+}
+
+function importConfig(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.systemConfig) {
+                currentConfig = { ...DEFAULT_CONFIG, ...data.systemConfig };
+                auntTags = [...(currentConfig.auntExtraNames || [])];
+                populateAllForms();
+                await db.ref('system_config').set(currentConfig);
+                showToast('📥 設定已匯入並儲存！');
+            } else {
+                showToast('❌ 匯入失敗：檔案內沒有 systemConfig');
+            }
+        } catch(err) {
+            showToast('❌ 匯入失敗：檔案格式錯誤');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+// ==========================================
+// UI 工具
+// ==========================================
+function toggleCard(cardId) {
+    const card = document.getElementById(cardId);
+    card.classList.toggle('collapsed');
+    const arrow = card.querySelector('.arrow');
+    arrow.classList.toggle('open');
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.innerText = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ==========================================
+// 啟動（等 bootTenant 把 window.TENANT_FIREBASE_CONFIG 填好後才跑）
+// ==========================================
+function bootSettings() {
+    // 顯示租戶標籤 + 首頁連結帶上 ?t=
+    const tag = document.getElementById('tenantTag');
+    if (tag) tag.textContent = `🏷 ${window.TENANT_NAME || window.TENANT_CODE || ''}`;
+    const home = document.getElementById('homeLink');
+    if (home && window.TENANT_CODE) {
+        home.href = './?t=' + encodeURIComponent(window.TENANT_CODE);
+    }
+    initFirebase();
+    loadSystemConfig();
+}
+
+if (window.__TENANT_READY__) {
+    bootSettings();
+} else {
+    window.addEventListener('tenant-ready', bootSettings, { once: true });
+}
+</script>
+</body>
+</html>

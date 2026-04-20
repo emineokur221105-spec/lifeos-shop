@@ -46,6 +46,11 @@
   - 獨立 `.js` 也升級：偵測 `import/export` 決定 module 模式，`ecma: 2022`
   - 同步建立 `FUTURE_IMPROVEMENTS.md`（P1/P2/P3 分級），記錄未來還要做什麼
   - 哲學：**先求有，再求好**
+- [x] **內嵌混淆預設開啟**（修正註解內假 script 造成 regex 誤判）2026-04-20
+  - 之前暫時關閉是因為 weekly.html 註解內出現 `<script type="module">` 字串，被 regex 當真 script 抓取，導致整個 build 污染 roster 等檔
+  - 修法：`minifyHtmlInlineScripts` 開頭先 strip HTML 註解
+  - 預設 `MINIFY_HTML_INLINE=true`（緊急可設 `=0` 關閉）
+  - 6 個 HTML（admin/index/office/roster/settings/shop/weekly）全部混淆通過，關鍵屬性名保留
 
 ### Phase 1：核心架構（進行中）
 - [x] Raymond 開「主 Firebase」project：`lifeos-shop-main`（config 存 LOCAL_SECRETS.md）
@@ -78,11 +83,26 @@
   - `auth.signInAnonymously()` → `signInAnonymously(auth)`
   - `function changeWeek` → `window.changeWeek = function`（module 作用域下 onclick 要走 window）
   - index.html 的 weekly 按鈕解鎖
-- [ ] `shop.html`（最大、最核心）
-  - [ ] 改寫成 v11 modular
-  - [ ] 接上 tenant-loader
-  - [ ] 7 個 shop_data JS 檔逐一改寫
-- [ ] 原本的 `settings.html` 整併進 admin 後台
+- [x] `shop.html`（最大、最核心）2026-04-20
+  - [x] 採方案 C：整頁 + shop_data/*.js 搬過來保留 v8 compat（之後再逐檔改 v11 modular → FUTURE_IMPROVEMENTS P1）
+  - [x] head 保留 Firebase v8 compat SDK（8.10.1）+ html2canvas
+  - [x] 頂部加 `<script type="module">`：跑 bootTenant（驗白名單 + 載租戶 config）→ 塞 `window.TENANT_FIREBASE_CONFIG` → 動態按序載入 6 個 shop_data JS
+  - [x] `shop/shop_data/config.js` 改：刪 DEFAULT_FIREBASE_CONFIG + localStorage fallback，改讀 `window.TENANT_FIREBASE_CONFIG`（沒有就報錯）
+  - [x] 刪舊版 `shop/shop_data/security.js`（統一版用 `core/security.js`，避免雙重防盜衝突）
+  - [x] 底部舊的 `<script src>` 串刪掉（已被 module loader 取代）
+  - [x] title 動態顯示租戶名
+  - [x] 錯誤處理：租戶載入失敗顯示提示 + 返回首頁連結
+  - [x] 搬 `manifest.json` 和 `sw.js` 到 src/
+  - [x] index.html shop 按鈕解鎖
+- [x] `settings.html`（採方案 C：隱藏頁 + admin 清單入口）2026-04-20
+  - [x] 複製舊版 settings.html 到 src/
+  - [x] head 加 module 開機腳本（bootTenant → 塞 TENANT_FIREBASE_CONFIG → 發 `tenant-ready` 事件）
+  - [x] 刪第 1 張「Firebase 連線設定」卡片（多租戶後由 admin 管 config，不在這裡改）
+  - [x] JS 拔掉：`DEFAULT_FIREBASE` / `getFirebaseConfig` / `loadFirebaseForm` / `saveFirebaseConfig` / `resetFirebaseConfig` / localStorage 機制
+  - [x] `initFirebase()` 改讀 `window.TENANT_FIREBASE_CONFIG`；啟動改成等 `tenant-ready` 事件
+  - [x] 匯出/匯入：移除 firebaseConfig 欄位；檔名加租戶代號；版號升到 2.0
+  - [x] top-bar 加租戶標籤、首頁連結帶 `?t=`
+  - [x] `admin.html` 租戶清單每行加「⚙️ 設定」按鈕（`<a target="_blank">` 開 `settings.html?t=<代號>`），動作欄寬度 130px → 220px
 - [x] 改寫 `index.html` 成租戶功能選單（深色版保留舊版 4 按鈕漸層色，roster 可點、shop/office/weekly 顯示「移植中」disabled）2026-04-20
 
 ### Phase 3：驗收（待開始）
@@ -125,15 +145,20 @@
 ```
 
 **Phase 2 進行中（2026-04-20）：**
-- 已完成：tenant-boot.js + roster.html（熱身）
-- 測試方式：`https://emineokur221105-spec.github.io/lifeos-shop/roster.html?t=demo-qinre-main`
-  - 沒 ?t= 會自動跳回首頁
-  - 有 ?t= 但租戶不存在會報錯（由 tenant-loader 丟）
+- 已完成：tenant-boot.js + roster.html + office.html + weekly.html + **shop.html（方案 C）**
+- shop.html 測試方式：`https://emineokur221105-spec.github.io/lifeos-shop/shop.html?t=demo-qinre-main`
+  - 沒 ?t= 會跳回首頁；有 ?t= 但租戶不存在會顯示錯誤頁
+  - 載入順序：bootTenant → `window.TENANT_FIREBASE_CONFIG` → v8 compat init → config/utils/schedule/settlement/app/weekly 依序載入
 
 **下一步：**
-1. 搬 `shop.html`（採方案 C：先用 v8 compat 整頁搬過來 + 換 Firebase config 來源，之後再逐檔改 v11 modular → 詳見 FUTURE_IMPROVEMENTS.md P1）
-2. `settings.html` 整併進 admin
-3. `common.js` 等 shop.html 移植時依需求補
+1. `common.js` 等有需求再補（目前沒迫切需要）
+2. Phase 3 驗收：kabe 實際操作確認 UI 一模一樣，修 bug
+3. 未來做：shop_data/*.js 逐檔改成 v11 modular（FUTURE_IMPROVEMENTS P1）
+
+**settings.html 測試方式：**
+- 正常入口：admin 後台租戶清單 → 點「⚙️ 設定」→ 新分頁打開 `settings.html?t=<代號>`
+- 直接網址：`https://.../settings.html?t=<代號>` 也可以
+- 沒 ?t= 會跳回首頁；租戶不存在會顯示錯誤頁
 
 ---
 

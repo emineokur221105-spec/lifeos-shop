@@ -8,11 +8,13 @@
 
 ## 🔒 安全與混淆
 
-- **[P1] HTML 內嵌 `<script>` 混淆**（2026-04-20 試做後暫時關閉）
-  - 原本只有獨立 `.js` 會混淆，所有頁面的內嵌 JS 是明碼
-  - `build.js` 已寫好 `minifyHtmlInlineScripts()`，但開啟後 roster 線上無法載入
-  - 現狀：`MINIFY_HTML_INLINE` 環境變數預設 `false`，要打開得設 `=1`
-  - 待辦：本地重現破壞原因（module scope? Sortable 全域查找?）再重啟
+- **[x] ~~[P1] HTML 內嵌 `<script>` 混淆~~** ✅ 2026-04-20
+  - 根因：`weekly.html` 第 12 行有 HTML 註解寫了「從 `<script type="module">` 內 import」這段字，regex `<script\b([^>]*)>([\s\S]*?)<\/script>` 把註解裡假的 script tag 當真，body lazy-match 抓到後面大段 HTML（含 CSS），terser 報 `Unexpected token: name (import)`
+  - 原本還以為是 module scope / Sortable 全域查找問題，其實是 build fail 導致 dist 不完整（非 weekly 的檔案複製到 dist 時也被影響），讓 roster 線上載入失敗
+  - 修法：`minifyHtmlInlineScripts` 開頭先 `html.replace(/<!--[\s\S]*?-->/g, '')` 清註解再掃 regex
+  - 預設改成開著，緊急關閉仍可 `MINIFY_HTML_INLINE=0 node build.js`
+  - 全部 6 個 HTML 混淆成功，關鍵屬性名（TENANT_FIREBASE_CONFIG、tenant-ready、system_config 等）都保留
+  - 縮減效果：settings.html 縮 34%
 - **[P2] Admin 密碼升級**
   - 目前 `?admin=0308` 是明碼 URL 參數，任何人看到網址就知道
   - 未來改：登入頁 + Firebase Auth（Email/Password 或 Google 登入）+ 真正的權限檢查
@@ -52,9 +54,7 @@
 
 ## 🔧 設定與整併
 
-- **[P1] `settings.html` 整併進 admin**
-  - 原系統 7 張設定卡片（價格 / 工數 / 阿姨 / 排班顯示 / 分紅 / Firebase / 系統安全）
-  - 放進 admin 的新分頁，或每個租戶自己的「租戶設定」
+- **[x] ~~[P1] `settings.html` 整併進 admin~~** ✅ 2026-04-20（採方案 C：settings.html 保留為隱藏頁 + admin 清單每行加「⚙️ 設定」按鈕開新分頁。拔掉 Firebase 連線卡片因為 admin 已管 config）
 - **[P2] 租戶層設定 vs 系統層設定分開**
   - 系統層（白名單、租戶清單）→ 主 Firebase
   - 租戶層（價格、工數、員工）→ 各自的租戶 Firebase

@@ -242,6 +242,7 @@
             '<td>' + esc(t.name || '') + '</td>' +
             '<td><code>' + esc(pid) + '</code></td>' +
             '<td class="row-actions">' +
+              '<a class="btn small" href="./settings.html?t=' + encodeURIComponent(code) + '" target="_blank" rel="noopener" title="在新分頁開啟此租戶的系統設定">⚙️ 設定</a>' +
               '<button class="btn small" data-act="tenant-edit" data-code="' + esc(code) + '">編輯</button>' +
               '<button class="btn small err" data-act="tenant-del" data-code="' + esc(code) + '">刪除</button>' +
             '</td>' +
@@ -256,7 +257,7 @@
       '</h2>' +
       (editing ? editor : (
         '<table>' +
-          '<thead><tr><th>代號</th><th>名稱</th><th>Firebase projectId</th><th style="width:130px;">動作</th></tr></thead>' +
+          '<thead><tr><th>代號</th><th>名稱</th><th>Firebase projectId</th><th style="width:220px;">動作</th></tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>'
       )) +

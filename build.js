@@ -12,9 +12,9 @@ const SKIP_MINIFY = new Set([
 ]);
 
 // 開關：HTML 內嵌 <script> 是否也進 terser
-// 之前開啟時 roster 有運作異常，暫先關掉；本地重現+修復後再打開
-// 用法：MINIFY_HTML_INLINE=1 node build.js
-const MINIFY_HTML_INLINE = process.env.MINIFY_HTML_INLINE === '1';
+// 預設開啟。2026-04-20 修正 HTML 註解內假 script 標籤的 regex 誤判問題後已穩定
+// 緊急關閉：MINIFY_HTML_INLINE=0 node build.js
+const MINIFY_HTML_INLINE = process.env.MINIFY_HTML_INLINE !== '0';
 
 const TERSER_BASE = {
   compress: {
@@ -40,6 +40,9 @@ async function minifyJsCode(code, isModule) {
 
 // 找 HTML 裡的 <script>...</script>（排除 <script src="...">），用 terser 混淆內嵌 JS
 async function minifyHtmlInlineScripts(html, relPath) {
+  // 先清掉 HTML 註解，避免註解裡寫的 `<script>` 字串被當作真的 script tag
+  // （例如 weekly.html 有「從 <script type="module"> 內 import」這種說明註解）
+  html = html.replace(/<!--[\s\S]*?-->/g, '');
   const regex = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
   const items = [];
   let m;
