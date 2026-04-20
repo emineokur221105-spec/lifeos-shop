@@ -50,6 +50,8 @@
         .btn-status.archive:hover { background: #c0392b; }
         .btn-status.restore { background: var(--success); }
         .btn-status.restore:hover { background: #1e8449; }
+        .btn-status.purge { background: #8b0000; margin-left: 4px; }
+        .btn-status.purge:hover { background: #5e0000; }
         
         .sidebar-btns { display: flex; flex-direction: column; gap: 8px; }
         .btn-add { background: var(--success); color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; font-weight: bold; }
@@ -334,6 +336,17 @@
             li.appendChild(checkbox);
             li.appendChild(nameSpan);
             li.appendChild(statusBtn);
+
+            // 離職區：多一顆永久刪除
+            if (currentView === 'archived') {
+                const purgeBtn = document.createElement('button');
+                purgeBtn.className = 'btn-status purge';
+                purgeBtn.innerText = '🗑️';
+                purgeBtn.title = '永久刪除（無法復原）';
+                purgeBtn.onclick = (e) => { e.stopPropagation(); deleteMember(member.id, member.name); };
+                li.appendChild(purgeBtn);
+            }
+
             listEl.appendChild(li);
         });
     };
@@ -347,6 +360,15 @@
                 showToast(`✅ 狀態已更新`);
             });
         }
+    };
+
+    window.deleteMember = (id, name) => {
+        if (!confirm(`確定要永久刪除「${name || '此人員'}」嗎？\n\n此操作無法復原，Firebase 資料會被徹底移除。`)) return;
+        remove(ref(db, 'roster/' + id)).then(() => {
+            selectedIds.delete(id);
+            if (currentId === id) window.createNewMember();
+            showToast(`🗑️ 已永久刪除：${name || id}`);
+        });
     };
 
     function setupAutoSave() {
