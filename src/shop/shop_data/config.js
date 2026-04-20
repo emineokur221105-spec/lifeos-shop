@@ -23,18 +23,13 @@ const SYSTEM_CONFIG = {
 };
 
 // ==========================================
-// 1. Firebase 設定（統一版：從租戶載入器取得 config）
+// 1. Firebase 設定（統一版 v11 modular：由 shop.html 的 module 開機先行呼叫 initShopDb()
+//    把 v8 風格的 db 掛到 window.__shopDb，這裡直接撿起來用）
 // ==========================================
-// 由 shop.html 的開機流程 (bootTenant) 填入 window.TENANT_FIREBASE_CONFIG
-const firebaseConfig = window.TENANT_FIREBASE_CONFIG;
-if (!firebaseConfig) {
-    throw new Error('❌ 租戶 Firebase 設定未載入，請從 index.html 透過 ?t=<代號> 進入');
+const db = window.__shopDb;
+if (!db) {
+    throw new Error('❌ 租戶 Firebase 尚未初始化（window.__shopDb 為空），請從 index.html 透過 ?t=<代號> 進入');
 }
-
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.database();
 
 // ==========================================
 // 2. 從 Firebase 載入 system_config 覆蓋預設值

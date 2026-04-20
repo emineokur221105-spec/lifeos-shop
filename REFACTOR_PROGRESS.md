@@ -179,6 +179,28 @@
 
 ---
 
+## 🔧 2026-04-20 夜：shop 升 v11 + build.js 隱性 bug
+
+**現象**：使用者反映 `shop.html` 進入排班 tab「完全空白、按鈕失效」。
+
+**根因（兩個）**：
+1. **shop.html 還在用 v8 compat SDK**（`firebasejs/8.10.1/firebase-app.js`），與主系統 v11 modular 並存，雖然 namespace 不同但是多餘 SDK 100KB+。
+2. **build.js 淺拷貝 TERSER_BASE 讓 terser 跨檔污染**（真正的 bug）：
+   - terser 會把 `module: true` 這個鍵**寫回** `compress` 與 `mangle` 子物件。
+   - `...TERSER_BASE` 只淺拷貝外層，內部 `compress / mangle` 物件跨檔共享。
+   - 一旦有 module 檔先被壓（例：`core/common.js`、`shop/firebase-compat.js`），後面的 classic 檔（`shop_data/*.js`）都被當 module 處理，頂層未使用 `const` 全被 DCE。
+   - 實測：`utils.js` 從 4.2KB 被壓成 72 bytes，`config.js` 剩 149 bytes（只剩 throw 那行）。
+   - 後果：線上版 shop_data 一半的程式碼根本不存在，所以 UI 是空的、按鈕沒功能。
+
+**修正**：
+1. 新增 `src/shop/firebase-compat.js`：v11 modular SDK 外面包一層 v8 風格 API（`db.ref(path).once/.on/.set/.update/.push/.remove/.child`），讓 shop_data/*.js 程式碼主體不動。
+2. `src/shop.html`：移除 8.10.1 compat CDN，開機 module 改 import `initShopDb()`，結果掛到 `window.__shopDb`。
+3. `src/shop/shop_data/config.js`：初始化區塊改 `const db = window.__shopDb`。
+4. `build.js`：`minifyJsCode` 每次都重建 `compress / mangle / format` 子物件（深拷貝），避免 terser 跨檔 mutate。
+5. 驗證：dist 所有 shop_data/*.js 回到正常大小（app.js 31.5KB、utils.js 2.5KB 等）。
+
+---
+
 ## 🧠 關鍵決策紀錄
 
 | 決策 | 內容 | 日期 |

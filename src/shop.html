@@ -9,25 +9,29 @@
     <meta name="theme-color" content="#2c3e50">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2641/2641409.png">
 
-    <!-- Firebase v8 compat SDK（shop_data/*.js 都用 v8 語法，之後再逐檔改 v11 modular） -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <!-- html2canvas 用於「日結截圖匯出」功能 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Firebase v11 modular SDK：由 shop/firebase-compat.js 包裝成 v8 風格 API 掛到 window.__shopDb -->
+    <!-- 不再載入 8.10.1 compat SDK，避免雙 SDK 衝突 -->
+
 
     <link rel="stylesheet" href="shop/shop_data/style.css">
 </head>
 <body>
 
-<!-- 開機流程：白名單驗證 + 載入租戶 Firebase config，完成後動態載入 shop_data/*.js -->
+<!-- 開機流程：
+     1. bootTenant() — 驗白名單、抓租戶 Firebase config
+     2. initShopDb() — v11 modular SDK 包成 v8 風格 API，掛到 window.__shopDb
+     3. 動態載入 shop_data/*.js（classic script），各檔透過 const db = window.__shopDb 取得 db -->
 <script type="module">
   import { bootTenant } from './core/tenant-boot.js';
+  import { initShopDb } from './shop/firebase-compat.js';
 
   try {
     const tenant = await bootTenant();
-    // 給 shop_data/config.js 用（v8 compat SDK 會讀這個）
-    window.TENANT_FIREBASE_CONFIG = tenant.firebaseConfig;
     window.TENANT_NAME = tenant.name;
     window.TENANT_CODE = tenant.code;
+    window.__shopDb = initShopDb(tenant.firebaseConfig);
     document.title = `${tenant.name} - 門店管理`;
   } catch (e) {
     console.error('[shop] 租戶開機失敗:', e);
@@ -39,7 +43,7 @@
     throw e;
   }
 
-  // 動態按順序載入 shop_data/*.js（v8 compat，彼此有相依順序）
+  // 動態依序載入 shop_data/*.js（classic script，共享 script-global 作用域）
   async function loadScript(src) {
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -51,7 +55,7 @@
   }
 
   const files = [
-    'shop/shop_data/config.js',     // 必須第一個（建立 db、全域變數）
+    'shop/shop_data/config.js',     // 必須第一個（讀 window.__shopDb 成 const db、宣告全域變數）
     'shop/shop_data/utils.js',
     'shop/shop_data/schedule.js',
     'shop/shop_data/settlement.js',

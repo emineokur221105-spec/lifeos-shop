@@ -31,11 +31,17 @@ const TERSER_BASE = {
 };
 
 async function minifyJsCode(code, isModule) {
-  return minify(code, {
-    ...TERSER_BASE,
+  // ⚠️ terser 會把 module/ecma 等鍵寫進 compress / mangle 子物件，
+  //    若用 ...TERSER_BASE 淺拷貝會跨檔污染（module:true 的檔會把後續 classic 檔也當 module 做 DCE，把頂層 const 砍光）。
+  //    所以這裡每次都 deep-clone，或顯式 re-create 子物件。
+  const opts = {
+    compress: { ...TERSER_BASE.compress },
+    mangle: { ...TERSER_BASE.mangle, reserved: [...TERSER_BASE.mangle.reserved] },
+    format: { ...TERSER_BASE.format },
     ecma: 2022,
     module: !!isModule,
-  });
+  };
+  return minify(code, opts);
 }
 
 // 找 HTML 裡的 <script>...</script>（排除 <script src="...">），用 terser 混淆內嵌 JS

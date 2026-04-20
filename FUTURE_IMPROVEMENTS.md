@@ -27,11 +27,10 @@
 
 ## 🏗 架構重構（shop.html 方案 C 後半）
 
-- **[P1] shop.html 內部 Firebase v8 compat → v11 modular**
-  - 目前方案 C：shop.html 保留 v8 compat（整頁當外掛模組搬過來，只換 Firebase config 來源）
-  - 兩套 SDK 並存，使用者要下載 ~100KB 額外 JS
-  - 未來逐個改：config.js / schedule.js / settlement.js / app.js / utils.js / weekly.js（7 個檔）
-  - 驗收標準：每改一個檔，shop 所有功能測過一輪
+- **[x] ~~[P1] shop.html 內部 Firebase v8 compat → v11 modular~~** ✅ 2026-04-20 夜
+  - 改法：`src/shop/firebase-compat.js` 在 v11 modular SDK 上包一層 v8 風格殼（`.ref/.once/.on/.set/.update/.push/.remove/.child/.off`），shop_data/*.js 程式碼主體完全不動。
+  - 副產物：順手抓到 `build.js` 隱性 bug——terser 會把 `module` 鍵寫進 compress/mangle，淺拷貝 `...TERSER_BASE` 讓 module 檔污染後面的 classic 檔（`utils.js` 被壓成 72 bytes、`config.js` 剩 149 bytes）。修成每次都重建子物件。這個 bug 很可能就是之前 shop 空白/按鈕失效的主因。
+  - 線上 payload 少了 ~100KB（8.10.1 compat SDK 整包拿掉）
 - **[P2] 兩套週結系統整併**
   - 舊版架構就遺留的：`shop.html` 內 weekly tab（用 `shop_v8_*` 節點）vs 獨立 `weekly.html`（用 `weekly_data/*` 節點）
   - 兩邊資料不相通
