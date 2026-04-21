@@ -239,9 +239,12 @@
   function renderToolbar() {
     return '<div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
       '<div style="color:var(--muted);font-size:13px;line-height:1.5;">' +
-        '💾 <b>建議習慣</b>：動白名單/租戶前先下載一份備份，<br>萬一誤刪可手動貼回 Firebase Console 救回來。' +
+        '💾 <b>備份建議</b>：動白名單/租戶前先下載一份。<br>萬一誤刪，選擇「從備份還原」直接上傳 JSON 蓋回來。' +
       '</div>' +
-      '<button class="btn warn" data-act="download-backup">📥 下載完整備份</button>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<button class="btn warn" data-act="download-backup">📥 下載完整備份</button>' +
+        '<button class="btn err" data-act="restore-backup">📤 從備份還原</button>' +
+      '</div>' +
     '</div>';
   }
 
@@ -401,6 +404,9 @@
       else if (act === 'download-backup') {
         await handleDownloadBackup();
       }
+      else if (act === 'restore-backup') {
+        await handleRestoreBackup();
+      }
       else if (act === 'wl-add') {
         await handleWhitelistAdd();
       }
@@ -538,6 +544,67 @@
     const count = Object.keys(backup.tenants).length;
     const wlCount = Object.keys(backup.whitelist).length;
     toast('✅ 備份已下載（' + count + ' 個租戶、' + wlCount + ' 筆白名單）', 'ok');
+  }
+
+  async function handleRestoreBackup() {
+    // 用動態 file input 避免 render 重繪影響
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      let backup;
+      try {
+        const text = await file.text();
+        backup = JSON.parse(text);
+      } catch (err) {
+        toast('❌ JSON 解析失敗：' + (err.message || ''), 'err');
+        return;
+      }
+      if (!backup || typeof backup !== 'object' || !('tenants' in backup) || !('whitelist' in backup)) {
+        toast('❌ 備份檔格式不正確（需含 tenants + whitelist）', 'err');
+        return;
+      }
+      const tenants = backup.tenants || {};
+      const whitelist = backup.whitelist || {};
+      const tCount = Object.keys(tenants).length;
+      const wCount = Object.keys(whitelist).length;
+      const exportedAt = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : '未知時間';
+
+      const ok1 = confirm(
+        '⚠️ 即將用這份備份覆蓋當前 Firebase 資料：\n\n' +
+        '備份時間：' + exportedAt + '\n' +
+        '將寫入：' + tCount + ' 個租戶、' + wCount + ' 筆白名單\n\n' +
+        '⚠️ 當前不在備份裡的資料會永久消失！\n' +
+        '（系統會先自動下載一份「現況備份」保險）\n\n' +
+        '按確定進入最終確認。'
+      );
+      if (!ok1) return;
+
+      const typed = prompt('最終確認：請打「還原」兩個字才會執行：');
+      if (typed !== '還原') {
+        toast('已取消還原', 'info');
+        return;
+      }
+
+      try {
+        // 先自動下載一份現況備份（後悔藥）
+        await handleDownloadBackup();
+        // 覆蓋寫入
+        await Promise.all([
+          fbDb.set(fbDb.ref(mainDb, 'tenants'), tenants),
+          fbDb.set(fbDb.ref(mainDb, 'whitelist'), whitelist)
+        ]);
+        await loadAll();
+        render();
+        toast('✅ 已從備份還原（' + tCount + ' 租戶 / ' + wCount + ' 白名單）', 'ok');
+      } catch (err) {
+        console.error(err);
+        toast('❌ 還原失敗：' + (err.message || err), 'err');
+      }
+    };
+    input.click();
   }
 
   async function handleCopyTenantInfo(code) {
