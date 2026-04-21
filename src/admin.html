@@ -232,8 +232,17 @@
   }
 
   function render() {
-    app.innerHTML = renderTenantsPanel() + renderWhitelistPanel();
+    app.innerHTML = renderToolbar() + renderTenantsPanel() + renderWhitelistPanel();
     bindEvents();
+  }
+
+  function renderToolbar() {
+    return '<div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
+      '<div style="color:var(--muted);font-size:13px;line-height:1.5;">' +
+        '💾 <b>建議習慣</b>：動白名單/租戶前先下載一份備份，<br>萬一誤刪可手動貼回 Firebase Console 救回來。' +
+      '</div>' +
+      '<button class="btn warn" data-act="download-backup">📥 下載完整備份</button>' +
+    '</div>';
   }
 
   function renderTenantsPanel() {
@@ -389,6 +398,9 @@
       else if (act === 'tenant-copy') {
         await handleCopyTenantInfo(btn.dataset.code);
       }
+      else if (act === 'download-backup') {
+        await handleDownloadBackup();
+      }
       else if (act === 'wl-add') {
         await handleWhitelistAdd();
       }
@@ -494,6 +506,38 @@
       state.editingTenant.draft = JSON.parse(JSON.stringify(state.tenants[code] || {}));
     }
     render();
+  }
+
+  async function handleDownloadBackup() {
+    // 拉最新 tenants + whitelist（不依賴 state 避免拿到過期快照）
+    const [tenantsSnap, whitelistSnap] = await Promise.all([
+      fbDb.get(fbDb.ref(mainDb, 'tenants')),
+      fbDb.get(fbDb.ref(mainDb, 'whitelist'))
+    ]);
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      source: 'LifeOS Admin 備份',
+      tenants: tenantsSnap.val() || {},
+      whitelist: whitelistSnap.val() || {}
+    };
+    const json = JSON.stringify(backup, null, 2);
+    // 檔名 lifeos-backup-YYYY-MM-DD_HHmm.json（本機時區）
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const stamp = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      '_' + pad(d.getHours()) + pad(d.getMinutes());
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lifeos-backup-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    const count = Object.keys(backup.tenants).length;
+    const wlCount = Object.keys(backup.whitelist).length;
+    toast('✅ 備份已下載（' + count + ' 個租戶、' + wlCount + ' 筆白名單）', 'ok');
   }
 
   async function handleCopyTenantInfo(code) {
