@@ -72,17 +72,9 @@
     const hashes = options.allowedHashes || [];
     await checkHostname(hashes);
 
-    // debug 旁路（上線前移除）：URL 帶 ?debug=1 或同 tab session 已標記 → 跳過 F12/DevTools 偵測
-    const urlDebug = new URLSearchParams(location.search).has('debug');
-    if (urlDebug) {
-      try { sessionStorage.setItem('lifeos_debug', '1'); } catch (e) {}
-    }
-    let sessionDebug = false;
-    try { sessionDebug = sessionStorage.getItem('lifeos_debug') === '1'; } catch (e) {}
-    if (urlDebug || sessionDebug) {
-      console.warn('[LifeOS] debug 模式：F12 攔截與 DevTools 偵測已停用（本 tab session 有效）');
-      return;
-    }
+    // 本地開發環境（localhost / 127.0.0.1）跳過 F12 攔截與 DevTools 偵測，方便 Raymond 除錯
+    const host = location.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '') return;
 
     installKeyBlocker();
     installDevToolsDetector(() => blockPage('偵測到開發者工具'));
