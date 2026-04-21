@@ -162,6 +162,22 @@
         .var-hint { background: #f4f6f8; padding: 10px; border-radius: 5px; font-size: 12px; color: #555; margin-bottom: 12px; line-height: 1.8; }
         .var-hint code { background: white; padding: 2px 6px; border-radius: 3px; color: var(--primary); font-weight: bold; }
 
+        /* 欄位管理 */
+        .field-card { background:#fafbfc; border:1px solid #e1e4e8; border-radius:6px; padding:10px; margin-bottom:10px; }
+        .field-card.sortable-ghost { opacity:0.4; background:#eaf4fb; border:2px dashed var(--primary); }
+        .field-card.system-field { background:#fff8e1; border-color:#f4d06f; }
+        .field-card-top { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+        .field-drag { cursor:grab; color:#888; font-size:18px; padding:0 4px; user-select:none; }
+        .field-drag:active { cursor:grabbing; }
+        .field-label { flex:1; min-width:180px; padding:6px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box; font-size:14px; }
+        .field-rows { width:60px; flex:0 0 auto; padding:6px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box; font-size:13px; text-align:center; }
+        .field-system-badge { background:#f39c12; color:white; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:bold; flex:0 0 auto; }
+        .field-del { background:var(--danger); color:white; border:0; padding:5px 10px; border-radius:3px; cursor:pointer; font-size:13px; flex:0 0 auto; }
+        .field-del:hover { background:#c0392b; }
+        .field-del:disabled { background:#ccc; cursor:not-allowed; }
+        .field-default { width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-family:inherit; font-size:13px; box-sizing:border-box; resize:vertical; }
+        .field-input-hint { font-size:11px; color:#888; display:block; margin-bottom:2px; }
+
         /* 手機版緊湊顯示設定 */
         @media (max-width: 768px) {
             .sidebar { position: fixed; left: -320px; height: 100%; width: 280px; }
@@ -243,46 +259,8 @@
             <span id="save-status" style="font-size:14px; color:#aaa; font-weight:normal; margin-left:10px;"></span>
         </h2>
         
-        <div class="input-group">
-            <label>👤 姓名 (輸入什麼顯示什麼)</label>
-            <input type="text" id="input-name" placeholder="範例：楠楠 或 【🇹🇭】楠楠">
-        </div>
+        <div id="dynamic-fields-container"></div>
 
-        <div class="input-group">
-            <label>📍 服務地點</label>
-            <select id="input-location"></select>
-        </div>
-
-        <div class="input-group">
-            <label>✨ 文案特點</label>
-            <textarea id="input-features" rows="2" placeholder="請輸入文案特點..."></textarea>
-        </div>
-
-        <div class="input-group">
-            <label>💖 身體密碼與時段</label>
-            <textarea id="input-body" rows="4"></textarea>
-        </div>
-
-        <div class="input-group">
-            <label>👑 核心服務</label>
-            <textarea id="input-core-services" rows="2"></textarea>
-        </div>
-
-        <div class="input-group">
-            <label>🎁 福利/活動</label>
-            <textarea id="input-gift" rows="2" placeholder="輸入福利或優惠內容..."></textarea>
-        </div>
-
-        <div class="input-group">
-            <label>💰 方案選擇</label>
-            <textarea id="input-packages" rows="5"></textarea>
-        </div>
-
-        <div class="input-group">
-            <label>✅ 加值服務</label>
-            <textarea id="input-extra-services" rows="5"></textarea>
-        </div>
-        
         <div class="btn-group">
             <button onclick="saveData(false)" class="btn btn-save">💾 手動儲存</button>
             <button onclick="generateOutput(true)" class="btn btn-generate">⚡ 預覽並複製單人</button>
@@ -316,6 +294,7 @@
 
         <div class="settings-tabs">
             <button type="button" class="settings-tab-btn active" data-tab="locations" onclick="switchSettingsTab('locations')">📍 地點清單</button>
+            <button type="button" class="settings-tab-btn" data-tab="fields" onclick="switchSettingsTab('fields')">📋 欄位管理</button>
             <button type="button" class="settings-tab-btn" data-tab="detailed" onclick="switchSettingsTab('detailed')">📋 詳細版模板</button>
             <button type="button" class="settings-tab-btn" data-tab="concise" onclick="switchSettingsTab('concise')">📋 精簡版模板</button>
         </div>
@@ -333,6 +312,19 @@
                 <tbody id="locations-tbody"></tbody>
             </table>
             <button type="button" onclick="addLocationRow()" style="background:var(--success); color:white; border:0; padding:8px 14px; border-radius:5px; cursor:pointer; margin-top:10px; font-family:inherit; font-weight:bold;">+ 新增地點</button>
+        </div>
+
+        <!-- 欄位管理 -->
+        <div class="settings-tab-pane" data-tab="fields" style="display:none;">
+            <div class="var-hint">
+                💡 <b>使用說明：</b><br>
+                • <b>欄位名稱</b>：可打 emoji、文字、或混合（例如 <code>💰</code>、<code>💰 方案選擇</code>），同時作為表單標籤與輸出時的區塊標題。清空就輸出留白。<br>
+                • <b>預設內文</b>：新增人員時自動帶入，省去每次重打。<br>
+                <br>
+                🖱️ 左側 <code>≡</code> 可拖拉排序。姓名/地點是系統欄位，只能改名不能刪。
+            </div>
+            <div id="fields-list"></div>
+            <button type="button" onclick="addFieldRow()" style="background:var(--success); color:white; border:0; padding:8px 14px; border-radius:5px; cursor:pointer; margin-top:10px; font-family:inherit; font-weight:bold;">+ 新增自訂欄位</button>
         </div>
 
         <!-- 詳細版模板 -->
@@ -400,9 +392,38 @@
     let autoSaveTimer = null;
     let currentView = 'active'; 
 
-    const DEFAULT_BODY = "身體密碼:\n溝通語言:英文\n上班時段【13.00-02.00】";
-    const DEFAULT_PACKAGES = "方案選擇:\n🔅40💲2300_1s\n🔅60💲2700_1s\n🔅60💲3300_2s\n🔅120💲4800-3s";
-    const DEFAULT_EXTRA = "加值服務項目A\n\n長鍾\n3+1\n5+3";
+    // ===== 動態欄位預設（新租戶用） =====
+    // id: 系統預設用固定 id（name/location/features/body/core/gift/packages/extra），舊資料無痛相容
+    // system: 'name' 或 'location' 為不可刪除的系統欄位
+    // label: 同時作為「表單欄位名」與「輸出排版區塊標題」，可打 emoji、文字、或混合；清空就全空
+    // rows:  textarea 高度
+    // defaultValue: 新增人員時自動帶入的預設內文（預設留空由用戶自行設定）
+    const DEFAULT_FIELDS = [
+        { id: 'name',     label: '👤 姓名', system: 'name' },
+        { id: 'location', label: '📍 服務地點', system: 'location' },
+        { id: 'features', label: '✨ 文案特點', rows: 2 },
+        { id: 'body',     label: '💖 身體密碼與時段', rows: 4 },
+        { id: 'core',     label: '👑 核心服務', rows: 2 },
+        { id: 'gift',     label: '🎁 福利/活動', rows: 2 },
+        { id: 'packages', label: '💰 方案選擇', rows: 5 },
+        { id: 'extra',    label: '✅ 加值服務', rows: 5 }
+    ];
+
+    function genFieldId() {
+        return 'field_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+    }
+
+    // 舊資料遷移：如果雲端 field 還分開存 emoji/label，合併成單一 label
+    function normalizeField(f) {
+        if (!f) return f;
+        if (f.emoji != null && f.label != null) {
+            const e = String(f.emoji || '').trim();
+            const l = String(f.label || '').trim();
+            const combined = e && l ? (e + ' ' + l) : (e || l);
+            return { ...f, label: combined, emoji: undefined };
+        }
+        return f;
+    }
 
     // ===== 地點清單預設（新租戶用） =====
     const DEFAULT_LOCATIONS = {
@@ -432,7 +453,8 @@
     // 設定狀態（從 tenant Firebase /roster_settings 載入，沒資料用 defaults）
     let settings = {
         locations: JSON.parse(JSON.stringify(DEFAULT_LOCATIONS)),
-        templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES))
+        templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
+        fields: JSON.parse(JSON.stringify(DEFAULT_FIELDS))
     };
     const settingsRef = ref(db, 'roster_settings');
 
@@ -476,7 +498,8 @@
             const legacyFooter = localStorage.getItem('myFooter');
             settings = {
                 locations: JSON.parse(JSON.stringify(DEFAULT_LOCATIONS)),
-                templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES))
+                templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
+                fields: JSON.parse(JSON.stringify(DEFAULT_FIELDS))
             };
             if (legacyFooter) settings.templates.detailed.footer = legacyFooter;
         } else {
@@ -485,10 +508,16 @@
                 templates: {
                     detailed: { ...DEFAULT_TEMPLATES.detailed, ...((s.templates && s.templates.detailed) || {}) },
                     concise: { ...DEFAULT_TEMPLATES.concise, ...((s.templates && s.templates.concise) || {}) }
-                }
+                },
+                fields: (Array.isArray(s.fields) && s.fields.length) ? s.fields.map(normalizeField) : JSON.parse(JSON.stringify(DEFAULT_FIELDS))
             };
         }
+        // 重新渲染動態表單（保留當前編輯狀態）
+        const prevId = currentId;
+        renderFormFromFields();
         rebuildLocationSelect();
+        if (prevId && allMembers[prevId]) loadMember(prevId);
+        else if (!prevId) createNewMember();
         if (Object.keys(allMembers).length) filterList();
     });
 
@@ -517,6 +546,45 @@
         });
         if (cur && list.find(l => l.code === cur)) sel.value = cur;
         else if (list.length) sel.value = list[0].code;
+    }
+
+    // ===== 依 settings.fields 動態渲染主表單 =====
+    function fieldInputId(f) {
+        if (f.system === 'name') return 'input-name';
+        if (f.system === 'location') return 'input-location';
+        return 'input-field-' + f.id;
+    }
+
+    function renderFormFromFields() {
+        const container = document.getElementById('dynamic-fields-container');
+        if (!container) return;
+        const fields = Array.isArray(settings.fields) && settings.fields.length
+            ? settings.fields : DEFAULT_FIELDS;
+        const esc = escapeAttr;
+        let html = '';
+        fields.forEach(f => {
+            const label = esc(f.label || '');
+            if (f.system === 'name') {
+                html += `<div class="input-group" data-field-id="${esc(f.id)}">` +
+                    `<label>${label}</label>` +
+                    `<input type="text" id="input-name">` +
+                    `</div>`;
+            } else if (f.system === 'location') {
+                html += `<div class="input-group" data-field-id="${esc(f.id)}">` +
+                    `<label>${label}</label>` +
+                    `<select id="input-location"></select>` +
+                    `</div>`;
+            } else {
+                const rows = parseInt(f.rows, 10) || 2;
+                html += `<div class="input-group" data-field-id="${esc(f.id)}">` +
+                    `<label>${label}</label>` +
+                    `<textarea id="input-field-${esc(f.id)}" rows="${rows}"></textarea>` +
+                    `</div>`;
+            }
+        });
+        container.innerHTML = html;
+        rebuildLocationSelect();
+        setupAutoSave();
     }
 
     function escapeAttr(s) {
@@ -640,25 +708,28 @@
 
     window.saveData = (isAuto = false) => {
         const nameInput = document.getElementById('input-name').value.trim();
-        if (!nameInput && isAuto) return; 
+        if (!nameInput && isAuto) return;
         if (!nameInput) return alert('請輸入姓名！');
         const statusEl = document.getElementById('save-status');
         if(isAuto) statusEl.innerText = "💾 自動儲存中...";
-        
+
         const existingStatus = currentId && allMembers[currentId] && allMembers[currentId].status ? allMembers[currentId].status : 'active';
 
-        const data = {
+        // 先保留舊資料（含被隱藏欄位，不要覆蓋丟失）
+        const prev = (currentId && allMembers[currentId]) ? allMembers[currentId] : {};
+        const data = Object.assign({}, prev, {
             name: nameInput,
-            location: document.getElementById('input-location').value, 
-            features: document.getElementById('input-features').value,
-            body: document.getElementById('input-body').value,
-            core: document.getElementById('input-core-services').value,
-            gift: document.getElementById('input-gift').value,
-            packages: document.getElementById('input-packages').value,
-            extra: document.getElementById('input-extra-services').value,
+            location: document.getElementById('input-location').value,
             status: existingStatus,
             sortIndex: currentId && allMembers[currentId] ? allMembers[currentId].sortIndex : Object.keys(allMembers).length
-        };
+        });
+
+        // 依動態欄位收集輸入
+        (settings.fields || DEFAULT_FIELDS).forEach(f => {
+            if (f.system === 'name' || f.system === 'location') return;
+            const el = document.getElementById('input-field-' + f.id);
+            if (el) data[f.id] = el.value;
+        });
         if (!currentId) {
             push(rosterRef, data).then((newRef) => {
                 currentId = newRef.key;
@@ -685,17 +756,19 @@
 
     window.loadMember = (id) => {
         currentId = id;
-        const data = allMembers[id];
+        const data = allMembers[id] || {};
         const firstLoc = (locationsSorted()[0] || {}).code || '';
-        document.getElementById('input-name').value = data.name || '';
-        document.getElementById('input-location').value = data.location || firstLoc;
-        document.getElementById('input-features').value = data.features || '';
-        document.getElementById('input-body').value = data.body || DEFAULT_BODY;
-        document.getElementById('input-core-services').value = data.core || '';
-        document.getElementById('input-gift').value = data.gift || '';
-        document.getElementById('input-packages').value = data.packages || DEFAULT_PACKAGES;
-        document.getElementById('input-extra-services').value = data.extra || DEFAULT_EXTRA;
-        document.getElementById('editor-title').innerHTML = `正在編輯：${data.name} <span id="save-status" style="font-size:14px; color:#aaa; font-weight:normal; margin-left:10px;"></span>`;
+        const nameEl = document.getElementById('input-name');
+        const locEl = document.getElementById('input-location');
+        if (nameEl) nameEl.value = data.name || '';
+        if (locEl) locEl.value = data.location || firstLoc;
+        (settings.fields || DEFAULT_FIELDS).forEach(f => {
+            if (f.system === 'name' || f.system === 'location') return;
+            const el = document.getElementById('input-field-' + f.id);
+            if (!el) return;
+            el.value = (data[f.id] != null) ? data[f.id] : '';
+        });
+        document.getElementById('editor-title').innerHTML = `正在編輯：${data.name || ''} <span id="save-status" style="font-size:14px; color:#aaa; font-weight:normal; margin-left:10px;"></span>`;
         window.closeSidebarOnMobile();
         window.filterList();
     };
@@ -703,16 +776,19 @@
     window.createNewMember = () => {
         currentId = null;
         const firstLoc = (locationsSorted()[0] || {}).code || '';
-        document.getElementById('input-name').value = '';
-        document.getElementById('input-location').value = firstLoc;
-        document.getElementById('input-features').value = '';
-        document.getElementById('input-body').value = DEFAULT_BODY;
-        document.getElementById('input-core-services').value = '';
-        document.getElementById('input-gift').value = ''; 
-        document.getElementById('input-packages').value = DEFAULT_PACKAGES;
-        document.getElementById('input-extra-services').value = DEFAULT_EXTRA;
+        const nameEl = document.getElementById('input-name');
+        const locEl = document.getElementById('input-location');
+        if (nameEl) nameEl.value = '';
+        if (locEl) locEl.value = firstLoc;
+        (settings.fields || DEFAULT_FIELDS).forEach(f => {
+            if (f.system === 'name' || f.system === 'location') return;
+            const el = document.getElementById('input-field-' + f.id);
+            if (!el) return;
+            el.value = f.defaultValue || '';
+        });
         document.getElementById('editor-title').innerHTML = `新增人員資訊 <span id="save-status" style="font-size:14px; color:#aaa; font-weight:normal; margin-left:10px;"></span>`;
-        document.getElementById('output-area').value = '';
+        const outArea = document.getElementById('output-area');
+        if (outArea) outArea.value = '';
         autoResizeOutput();
         window.filterList();
         window.closeSidebarOnMobile();
@@ -796,29 +872,28 @@
     })();
 
     function formatText(data) {
-        const extra = data.extra || DEFAULT_EXTRA;
-        let output = `${data.name}\n\n`; 
-        if(data.features) output += `✨\n${data.features}\n\n`;
-        output += `💖\n${data.body}\n\n`;
-        if(data.core) output += `👑\n${data.core}\n\n`;
-        if(data.gift) output += `🎁\n${data.gift}\n\n`;
-        output += `💰\n${data.packages}\n\n`;
-        if(extra) output += `✅ 加值服務\n${extra}`;
+        const fields = (settings.fields && settings.fields.length) ? settings.fields : DEFAULT_FIELDS;
+        let output = `${data.name || ''}\n\n`;
+        fields.forEach(f => {
+            if (f.system === 'name' || f.system === 'location') return;
+            const val = data[f.id];
+            if (!val) return;
+            const heading = String(f.label || '').trim();
+            output += heading ? `${heading}\n${val}\n\n` : `${val}\n\n`;
+        });
         return output.trim();
     }
 
     window.generateOutput = (autoCopy = false) => {
-        const name = document.getElementById('input-name').value;
+        const nameEl = document.getElementById('input-name');
+        const name = nameEl ? nameEl.value : '';
         if (!name) return alert('請先輸入姓名');
-        const currentData = {
-            name: name,
-            features: document.getElementById('input-features').value,
-            body: document.getElementById('input-body').value,
-            core: document.getElementById('input-core-services').value,
-            gift: document.getElementById('input-gift').value,
-            packages: document.getElementById('input-packages').value,
-            extra: document.getElementById('input-extra-services').value
-        };
+        const currentData = { name };
+        (settings.fields || DEFAULT_FIELDS).forEach(f => {
+            if (f.system === 'name' || f.system === 'location') return;
+            const el = document.getElementById('input-field-' + f.id);
+            if (el) currentData[f.id] = el.value;
+        });
         let output = formatText(currentData) + `\n\n————————`;
         document.getElementById('output-area').value = output;
         autoResizeOutput();
@@ -894,6 +969,7 @@
     window.openSettings = () => {
         document.getElementById('settings-modal').classList.add('show');
         renderLocationsTable();
+        renderFieldsPanel();
         fillTemplateInputs();
         switchSettingsTab('locations');
     };
@@ -940,6 +1016,74 @@
             tbody.appendChild(tr);
         });
     }
+
+    // ===== 欄位管理 Tab =====
+    let _fieldsSortable = null;
+
+    function fieldCardHtml(f) {
+        const esc = escapeAttr;
+        const isSys = !!f.system;
+        const rows = parseInt(f.rows, 10) || 2;
+        const cls = 'field-card' + (isSys ? ' system-field' : '');
+        return `<div class="${cls}" data-field-id="${esc(f.id)}" data-field-system="${esc(f.system || '')}">` +
+            `<div class="field-card-top">` +
+                `<span class="field-drag" title="拖拉排序">≡</span>` +
+                `<input type="text" class="field-label" value="${esc(f.label || '')}" placeholder="欄位名稱（可含 emoji，例：💰 方案選擇）" title="同時是表單欄位名與輸出時的區塊標題，留空則輸出不帶標題">` +
+                (isSys
+                    ? `<span class="field-system-badge">${f.system === 'name' ? '姓名' : '地點'}（系統）</span>`
+                    : `<input type="number" class="field-rows" min="1" max="15" value="${rows}" title="輸入框高度（行數）">`) +
+                `<button type="button" class="field-del" ${isSys ? 'disabled title="系統欄位不能刪除"' : 'title="刪除此欄位"'}>🗑️</button>` +
+            `</div>` +
+            (isSys ? '' :
+                `<span class="field-input-hint">預設內文（新增人員時自動帶入，省去重打）</span>` +
+                `<textarea class="field-default" rows="4">${esc(f.defaultValue || '')}</textarea>`
+            ) +
+        `</div>`;
+    }
+
+    function bindFieldCardEvents(card) {
+        const delBtn = card.querySelector('.field-del');
+        if (delBtn && !delBtn.disabled) {
+            delBtn.onclick = () => {
+                const label = card.querySelector('.field-label').value || '此欄位';
+                if (!confirm(`確定刪除「${label}」？\n\n⚠️ 已存在的員工資料不會被刪除，只是以後表單不再顯示。`)) return;
+                card.remove();
+            };
+        }
+    }
+
+    function renderFieldsPanel() {
+        const list = document.getElementById('fields-list');
+        if (!list) return;
+        const fields = (settings.fields && settings.fields.length) ? settings.fields : DEFAULT_FIELDS;
+        list.innerHTML = fields.map(fieldCardHtml).join('');
+        list.querySelectorAll('.field-card').forEach(bindFieldCardEvents);
+        // 初始化拖拉（名稱/地點卡片也可以拖，但排序會被儲存）
+        if (_fieldsSortable) { try { _fieldsSortable.destroy(); } catch {} }
+        _fieldsSortable = Sortable.create(list, {
+            handle: '.field-drag',
+            animation: 150,
+            ghostClass: 'sortable-ghost'
+        });
+    }
+
+    window.addFieldRow = () => {
+        const list = document.getElementById('fields-list');
+        if (!list) return;
+        const newField = {
+            id: genFieldId(),
+            label: '',
+            rows: 3,
+            defaultValue: ''
+        };
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = fieldCardHtml(newField);
+        const card = wrapper.firstElementChild;
+        list.appendChild(card);
+        bindFieldCardEvents(card);
+        card.querySelector('.field-label').focus();
+        card.querySelector('.field-label').select();
+    };
 
     window.addLocationRow = () => {
         const tbody = document.getElementById('locations-tbody');
@@ -1026,8 +1170,41 @@
             }
         };
 
+        // 收欄位（依畫面排序）
+        const newFields = [];
+        const fieldCards = document.querySelectorAll('#fields-list .field-card');
+        let hasName = false, hasLoc = false;
+        const seenIds = new Set();
+        for (const card of fieldCards) {
+            const id = card.getAttribute('data-field-id');
+            const system = card.getAttribute('data-field-system') || '';
+            const label = card.querySelector('.field-label').value;
+            if (seenIds.has(id)) continue;
+            seenIds.add(id);
+            if (system === 'name') hasName = true;
+            if (system === 'location') hasLoc = true;
+            const f = { id, label };
+            if (system) {
+                f.system = system;
+            } else {
+                const rowsEl = card.querySelector('.field-rows');
+                const defEl = card.querySelector('.field-default');
+                f.rows = parseInt(rowsEl ? rowsEl.value : 2, 10) || 2;
+                f.defaultValue = defEl ? defEl.value : '';
+            }
+            newFields.push(f);
+        }
+        if (!hasName || !hasLoc) {
+            alert('姓名和地點是系統欄位，不能刪除。請還原後再儲存。');
+            return;
+        }
+        if (newFields.length < 2) {
+            alert('至少要保留姓名和地點兩個欄位');
+            return;
+        }
+
         try {
-            await set(settingsRef, { locations: newLocations, templates: newTemplates });
+            await set(settingsRef, { locations: newLocations, templates: newTemplates, fields: newFields });
             showToast('✅ 設定已儲存');
             closeSettings();
         } catch (err) {
