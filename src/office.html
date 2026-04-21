@@ -257,16 +257,8 @@
     let saveTimeout = null;
 
     const defaultData = {
-      shareholders: [
-          { name: '股東甲', percent: 50 },
-          { name: '股東乙', percent: 30 },
-          { name: '股東丙', percent: 20 }
-      ],
-      expenses: [
-        { type: 'team', name: '辦公用品', amount: 500, paidBy: '股東甲' },
-        { type: 'company', name: '設備維護', amount: 2000, paidBy: '股東甲' },
-        { type: 'team', name: '雜項支出', amount: 800, paidBy: '股東乙' }
-      ]
+      shareholders: [],
+      expenses: []
     };
 
     // ─── 週次工具（邏輯對齊 weekly.html） ───
