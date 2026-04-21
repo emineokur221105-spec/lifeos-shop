@@ -406,20 +406,20 @@
 
     // ===== 地點清單預設（新租戶用） =====
     const DEFAULT_LOCATIONS = {
-        '民權路': { label: '民權路', badge: '【民】', short: '民權', order: 0 },
-        '莊二街': { label: '莊二街', badge: '【莊】', short: '莊二', order: 1 },
-        '北新街': { label: '北新街', badge: '【北】', short: '北新', order: 2 }
+        '某某街': { label: '某某街', badge: '【A】', short: '某街', order: 0 },
+        '某某路': { label: '某某路', badge: '【B】', short: '某路', order: 1 },
+        '某某巷': { label: '某某巷', badge: '【C】', short: '某巷', order: 2 }
     };
 
     // ===== 文案模板預設 =====
     const DEFAULT_TEMPLATES = {
         detailed: {
-            header: `{date}\n@all\n🔥紙房子🔥定點\n\n下單請敲 ➡️➡️紙房子1線-派工下單【東京】\n\n⭐️桃園區\n—————————————`,
-            sectionHead: `【 {label} 】\n❌❌❌不接生客\n需成功消費3次以上\n今日 ({count}) 位上班`,
+            header: `{date}\n@all\n🔥定點上班表🔥\n\n下單請敲 ➡️➡️@你的派工名稱\n\n⭐️地區\n—————————————`,
+            sectionHead: `【 {label} 】\n今日 ({count}) 位上班`,
             sectionSep: `—————————————`,
             detailsSep: `=======================`,
             personSep: `————————`,
-            footer: `***請顧客帶  整數進去 小姐小鈔不夠多***\n\n入珠客不告知洗澡\n遭小姐打槍 不退費 \n\n偷拍需刪除影or照片 \n罰 ( 紅包3,000 ) \n偷拔套 ( 紅包6,000 )\n\n洗澡後不退錢\n超過10分鐘禁止更換方案\n脫衣服打槍500 / 摸到身體+500 (脫衣服又亂摸=1,000)\n\n熟爆30,000＋當日營業額\n生爆40,000＋當日營業額\n生爆熟60,000＋當日營業額\n勞煩派工請勿亂搞`
+            footer: `※ 請顧客自行確認服務內容\n※ 相關規範依現場公告為準\n※ 詳情請洽派工人員`
         },
         concise: {
             header: `{date} ⚠️本日班表更新⚠️\n@All \n=================`,
