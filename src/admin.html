@@ -239,10 +239,13 @@
   function renderToolbar() {
     return '<div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
       '<div style="color:var(--muted);font-size:13px;line-height:1.5;">' +
-        '💾 <b>備份建議</b>：動白名單/租戶前先下載一份。<br>萬一誤刪，選擇「從備份還原」直接上傳 JSON 蓋回來。' +
+        '💾 <b>備份建議</b>：動白名單/租戶前先下載一份。<br>' +
+        '• <b>主資料備份</b>：租戶清單 + 白名單（快、小）<br>' +
+        '• <b>全站備份</b>：加上所有租戶 Firebase 內的實際資料（roster/weekly/office/shop 等），適合長期保存' +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-        '<button class="btn warn" data-act="download-backup">📥 下載完整備份</button>' +
+        '<button class="btn warn" data-act="download-backup">📥 主資料備份</button>' +
+        '<button class="btn warn" data-act="full-backup">🗂️ 全站備份</button>' +
         '<button class="btn err" data-act="restore-backup">📤 從備份還原</button>' +
       '</div>' +
     '</div>';
@@ -404,6 +407,9 @@
       else if (act === 'download-backup') {
         await handleDownloadBackup();
       }
+      else if (act === 'full-backup') {
+        await handleFullBackup();
+      }
       else if (act === 'restore-backup') {
         await handleRestoreBackup();
       }
@@ -546,6 +552,95 @@
     toast('✅ 備份已下載（' + count + ' 個租戶、' + wlCount + ' 筆白名單）', 'ok');
   }
 
+  async function handleFullBackup() {
+    const tenants = state.tenants || {};
+    const codes = Object.keys(tenants);
+    if (codes.length === 0) {
+      toast('❌ 沒有租戶可備份', 'err');
+      return;
+    }
+    if (!confirm(
+      '將備份所有資料：\n' +
+      '• Admin 主資料（租戶清單 + 白名單）\n' +
+      '• ' + codes.length + ' 個租戶各自 Firebase 的完整資料\n\n' +
+      '視資料量可能需要 10-60 秒，請不要關閉頁面。'
+    )) return;
+    toast('📥 開始全站備份，請稍候...', 'info');
+
+    // 拉 main 資料
+    const [tenantsSnap, whitelistSnap] = await Promise.all([
+      fbDb.get(fbDb.ref(mainDb, 'tenants')),
+      fbDb.get(fbDb.ref(mainDb, 'whitelist'))
+    ]);
+
+    // 動態載入 firebase-app（只這個功能用到）
+    const fbApp = await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js');
+
+    // 逐租戶讀完整根資料
+    const tenantsData = {};
+    const errors = [];
+    for (const code of codes) {
+      const t = tenants[code];
+      if (!t || !t.firebaseConfig) {
+        errors.push(code + '（缺 firebaseConfig）');
+        continue;
+      }
+      let app = null;
+      try {
+        const appName = 'backup-' + code + '-' + Date.now();
+        app = fbApp.initializeApp(t.firebaseConfig, appName);
+        const tenantDb = fbDb.getDatabase(app);
+        const rootSnap = await fbDb.get(fbDb.ref(tenantDb, '/'));
+        tenantsData[code] = rootSnap.val() || {};
+      } catch (err) {
+        console.error('[全站備份] 讀 ' + code + ' 失敗：', err);
+        errors.push(code + '（' + (err.message || err) + '）');
+        tenantsData[code] = null;
+      } finally {
+        if (app) { try { await fbApp.deleteApp(app); } catch {} }
+      }
+    }
+
+    const backup = {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      source: 'LifeOS Admin 全站備份',
+      main: {
+        tenants: tenantsSnap.val() || {},
+        whitelist: whitelistSnap.val() || {}
+      },
+      tenantsData: tenantsData
+    };
+
+    const json = JSON.stringify(backup, null, 2);
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const stamp = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      '_' + pad(d.getHours()) + pad(d.getMinutes());
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lifeos-fullbackup-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+    const okCount = codes.length - errors.length;
+    if (errors.length) {
+      alert('⚠️ 全站備份完成但部份有問題：\n\n' +
+        '✅ 成功：' + okCount + ' 個租戶\n' +
+        '❌ 失敗：' + errors.length + ' 個\n' + errors.map(e => '  • ' + e).join('\n') + '\n\n' +
+        '檔案大小：' + sizeMB + ' MB\n' +
+        '已下載，失敗的租戶在檔案裡為 null（請檢查 firebaseConfig 是否正確）。');
+      toast('⚠️ 全站備份完成（' + okCount + '/' + codes.length + '）', 'err');
+    } else {
+      toast('✅ 全站備份已下載（' + codes.length + ' 個租戶 / ' + sizeMB + ' MB）', 'ok');
+    }
+  }
+
   async function handleRestoreBackup() {
     // 用動態 file input 避免 render 重繪影響
     const input = document.createElement('input');
@@ -562,21 +657,40 @@
         toast('❌ JSON 解析失敗：' + (err.message || ''), 'err');
         return;
       }
-      if (!backup || typeof backup !== 'object' || !('tenants' in backup) || !('whitelist' in backup)) {
+      if (!backup || typeof backup !== 'object') {
+        toast('❌ 備份檔格式不正確', 'err');
+        return;
+      }
+      // 相容兩種格式：v1（扁平 tenants/whitelist） / v2（main.tenants + tenantsData）
+      let tenants, whitelist;
+      const isV2 = backup.main && backup.main.tenants;
+      if (isV2) {
+        tenants = backup.main.tenants || {};
+        whitelist = backup.main.whitelist || {};
+      } else if ('tenants' in backup && 'whitelist' in backup) {
+        tenants = backup.tenants || {};
+        whitelist = backup.whitelist || {};
+      } else {
         toast('❌ 備份檔格式不正確（需含 tenants + whitelist）', 'err');
         return;
       }
-      const tenants = backup.tenants || {};
-      const whitelist = backup.whitelist || {};
       const tCount = Object.keys(tenants).length;
       const wCount = Object.keys(whitelist).length;
+      const tenantDataCount = isV2 && backup.tenantsData ? Object.keys(backup.tenantsData).length : 0;
       const exportedAt = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : '未知時間';
 
+      const v2Note = isV2
+        ? '\n\nℹ️ 這是「全站備份」，檔案裡還有 ' + tenantDataCount + ' 個租戶的實際營業資料。' +
+          '\n但本功能只會還原 Admin 主資料（租戶清單 + 白名單），不會自動覆蓋各租戶 Firebase。' +
+          '\n若需還原某租戶資料，請去 Firebase Console 手動 Import JSON（從備份檔的 tenantsData 欄位取）。'
+        : '';
+
       const ok1 = confirm(
-        '⚠️ 即將用這份備份覆蓋當前 Firebase 資料：\n\n' +
+        '⚠️ 即將用這份備份覆蓋當前 Admin 主資料：\n\n' +
         '備份時間：' + exportedAt + '\n' +
-        '將寫入：' + tCount + ' 個租戶、' + wCount + ' 筆白名單\n\n' +
-        '⚠️ 當前不在備份裡的資料會永久消失！\n' +
+        '將寫入：' + tCount + ' 個租戶、' + wCount + ' 筆白名單' +
+        v2Note +
+        '\n\n⚠️ 當前不在備份裡的資料會永久消失！\n' +
         '（系統會先自動下載一份「現況備份」保險）\n\n' +
         '按確定進入最終確認。'
       );
