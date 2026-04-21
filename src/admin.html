@@ -143,7 +143,7 @@
 <script type="module">
   // ---- 0. 登入檢查（SHA-256 比對，明文不進原始碼）----
   const params = new URLSearchParams(location.search);
-  const ADMIN_KEY_HASH = '1662edf93d2469d8b7f5d33eb7a411e51e7c5186e5d81c14a0e85ac8295abd0e';
+  const ADMIN_KEY_HASH = 'd86d84d945596a7836b26b9e06e05042ba9617bac697b793b008fb4c4f7c218a';
   async function sha256Hex(str) {
     const bytes = new TextEncoder().encode(str);
     const hash = await crypto.subtle.digest('SHA-256', bytes);
@@ -275,6 +275,13 @@
     const d = editing.draft || {};
     const cfgStr = d.firebaseConfig ? JSON.stringify(d.firebaseConfig, null, 2) : '';
     const defStr = d.defaults ? JSON.stringify(d.defaults, null, 2) : '';
+    const hasPwd = !!d.settingsPasswordHash;
+    const pwdHint = hasPwd
+      ? '目前<b style="color:var(--ok);">已設定自訂密碼</b>（已覆寫預設 1357）。留空 = 不變更，輸入新密碼會覆蓋。'
+      : '目前<b style="color:var(--warn);">使用預設密碼 1357</b>。輸入新密碼可改成該租戶專屬密碼。';
+    const pwdClearBtn = hasPwd && !editing.isNew
+      ? ' <button class="btn small err" data-act="tenant-clear-pwd" data-code="' + esc(editing.code) + '" style="margin-left:8px;">🔓 還原預設 1357</button>'
+      : '';
     return '<div class="form-grid">' +
       '<label>代號 *</label>' +
       '<div>' +
@@ -293,6 +300,11 @@
       '<div>' +
         '<textarea id="f-defaults" rows="5" placeholder="{}">' + esc(defStr) + '</textarea>' +
         '<div class="field-hint">可留空；未來給 shop.html 首次初始化用。</div>' +
+      '</div>' +
+      '<label>Settings 密碼</label>' +
+      '<div>' +
+        '<input id="f-settings-pwd" type="password" autocomplete="new-password" placeholder="' + (hasPwd ? '留空 = 不變更' : '留空 = 不設密碼') + '">' +
+        '<div class="field-hint">' + pwdHint + pwdClearBtn + '</div>' +
       '</div>' +
     '</div>' +
     '<div class="form-actions">' +
@@ -370,6 +382,9 @@
         await loadAll();
         render();
       }
+      else if (act === 'tenant-clear-pwd') {
+        await handleClearPassword(btn.dataset.code);
+      }
       else if (act === 'wl-add') {
         await handleWhitelistAdd();
       }
@@ -392,6 +407,7 @@
     const name = document.getElementById('f-name').value.trim();
     const cfgRaw = document.getElementById('f-config').value.trim();
     const defRaw = document.getElementById('f-defaults').value.trim();
+    const pwdInput = document.getElementById('f-settings-pwd').value;
 
     if (!code) { toast('代號必填', 'err'); return; }
     if (!/^[A-Za-z0-9_-]+$/.test(code)) { toast('代號只能用英數字 / 底線 / 連字符', 'err'); return; }
@@ -418,10 +434,33 @@
       if (!confirm('代號「' + code + '」已存在，要覆蓋嗎？')) return;
     }
 
-    await saveTenant(code, { name, firebaseConfig, defaults });
-    toast('已儲存 ' + code, 'ok');
+    // 保留現有 settingsPasswordHash；有輸入新密碼才覆蓋
+    const existingHash = state.tenants[code] && state.tenants[code].settingsPasswordHash;
+    let settingsPasswordHash = existingHash;
+    if (pwdInput) {
+      settingsPasswordHash = await sha256Hex(pwdInput);
+    }
+
+    const payload = { name, firebaseConfig, defaults };
+    if (settingsPasswordHash) payload.settingsPasswordHash = settingsPasswordHash;
+
+    await saveTenant(code, payload);
+    toast(pwdInput ? '已儲存（含新密碼）' : '已儲存 ' + code, 'ok');
     state.editingTenant = null;
     await loadAll();
+    render();
+  }
+
+  async function handleClearPassword(code) {
+    if (!code) return;
+    if (!confirm('還原「' + code + '」的 settings 密碼為預設 1357？\n\n還原後任何知道預設密碼的人都能進 settings.html。要強化保護請重新設定自訂密碼。')) return;
+    await fbDb.remove(fbDb.ref(mainDb, 'tenants/' + code + '/settingsPasswordHash'));
+    toast('已還原預設密碼 1357', 'ok');
+    await loadAll();
+    // 若正在編輯這個租戶，同步更新 draft
+    if (state.editingTenant && state.editingTenant.code === code) {
+      state.editingTenant.draft = JSON.parse(JSON.stringify(state.tenants[code] || {}));
+    }
     render();
   }
 

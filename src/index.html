@@ -72,6 +72,7 @@
   .btn-office { background: linear-gradient(135deg, #16a085, #2ecc71); }
   .btn-weekly { background: linear-gradient(135deg, #d35400, #f39c12); }
   .btn-roster { background: linear-gradient(135deg, #8e44ad, #9b59b6); }
+  .btn-settings { background: linear-gradient(135deg, #34495e, #7f8c8d); }
   .footer { margin-top: 24px; font-size: 12px; color: #666; }
   .entry-form { display: flex; gap: 8px; margin-top: 8px; }
   .entry-form input {
@@ -161,6 +162,70 @@
     });
   };
 
+  // 系統設定密碼 —— 預設 1357 的 SHA-256
+  const DEFAULT_SETTINGS_PWD_HASH = 'f3e055913a0b1eb0f07317896f9a1bc466b9a50db85a7f882f3ffde9ffb23aca';
+  async function sha256Hex(str) {
+    const bytes = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function renderHome(tenant, settingsPwdHash) {
+    const q = '?t=' + encodeURIComponent(tenant.code);
+    app.innerHTML =
+      '<div class="tenant-tag">🏷 ' + (tenant.name ? (tenant.name + '（' + tenant.code + '）') : tenant.code) + '</div>' +
+      '<a href="./shop.html' + q + '" class="menu-btn btn-shop">🏢 門店排班</a>' +
+      '<a href="./office.html' + q + '" class="menu-btn btn-office">💰 分紅結算</a>' +
+      '<a href="./weekly.html' + q + '" class="menu-btn btn-weekly">📊 週結業績</a>' +
+      '<a href="./roster.html' + q + '" class="menu-btn btn-roster">📋 服務資訊排版</a>' +
+      '<a href="#" id="openSettings" class="menu-btn btn-settings">⚙️ 系統設定</a>' +
+      '<div class="footer">資料已連接租戶 Firebase</div>';
+    document.getElementById('openSettings').addEventListener('click', (e) => {
+      e.preventDefault();
+      renderSettingsPwdForm(tenant, settingsPwdHash);
+    });
+  }
+
+  function renderSettingsPwdForm(tenant, settingsPwdHash) {
+    const q = '?t=' + encodeURIComponent(tenant.code);
+    app.innerHTML =
+      '<div class="msg info">' +
+        '⚙️ 系統設定 — 請輸入密碼' +
+        '<div style="font-size:12px;color:#999;margin-top:4px;">忘記密碼請聯繫管理員</div>' +
+        '<form class="entry-form" id="pwdForm">' +
+          '<input id="pwdInput" type="password" autocomplete="off" />' +
+          '<button type="submit">進入</button>' +
+        '</form>' +
+        '<div id="pwdError" style="color:#e74c3c;font-size:13px;margin-top:6px;min-height:18px;"></div>' +
+      '</div>' +
+      '<button class="switch-tenant" id="pwdBack">← 返回</button>';
+    const form = document.getElementById('pwdForm');
+    const input = document.getElementById('pwdInput');
+    const errBox = document.getElementById('pwdError');
+    input.focus();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pwd = input.value;
+      if (!pwd) return;
+      const h = await sha256Hex(pwd);
+      if (h === settingsPwdHash) {
+        // 一次性 token：settings.html 進頁會消費掉，重整或直接貼 URL 都會被踢回
+        try {
+          const nonce = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
+          sessionStorage.setItem('settings_unlock_token_' + tenant.code, nonce);
+        } catch {}
+        location.href = './settings.html' + q;
+      } else {
+        errBox.textContent = '密碼錯誤';
+        input.value = '';
+        input.focus();
+      }
+    });
+    document.getElementById('pwdBack').addEventListener('click', () => {
+      renderHome(tenant, settingsPwdHash);
+    });
+  }
+
   if (tenantCode) {
     try {
       setStatus('<span class="spinner"></span>驗證授權中...', 'loading');
@@ -170,14 +235,18 @@
       // 成功載入才存，避免壞代號被記住
       try { localStorage.setItem(LAST_TENANT_KEY, tenantCode); } catch {}
 
-      const q = '?t=' + encodeURIComponent(tenantCode);
-      app.innerHTML =
-        '<div class="tenant-tag">🏷 ' + (tenant.name ? (tenant.name + '（' + tenant.code + '）') : tenant.code) + '</div>' +
-        '<a href="./shop.html' + q + '" class="menu-btn btn-shop">🏢 門店排班</a>' +
-        '<a href="./office.html' + q + '" class="menu-btn btn-office">💰 分紅結算</a>' +
-        '<a href="./weekly.html' + q + '" class="menu-btn btn-weekly">📊 週結業績</a>' +
-        '<a href="./roster.html' + q + '" class="menu-btn btn-roster">📋 服務資訊排版</a>' +
-        '<div class="footer">資料已連接租戶 Firebase</div>';
+      // 預載 settings 密碼 hash（沒設自訂就用預設 1357）
+      let settingsPwdHash = DEFAULT_SETTINGS_PWD_HASH;
+      try {
+        const { get, ref } = await import('https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js');
+        const { mainDb } = await import('./core/main-firebase-config.js');
+        const snap = await get(ref(mainDb, 'tenants/' + tenantCode + '/settingsPasswordHash'));
+        if (snap.val()) settingsPwdHash = snap.val();
+      } catch (e) {
+        console.warn('[LifeOS] 讀取 settings 密碼失敗，沿用預設：', e);
+      }
+
+      renderHome(tenant, settingsPwdHash);
     } catch (err) {
       console.error('[LifeOS] 啟動失敗', err);
       app.innerHTML =
@@ -190,14 +259,10 @@
     }
   }
   else {
-    // 沒帶 ?t=：若上次有記住且沒強制 ?pick，自動跳
+    // 沒帶 ?t=：一律顯示輸入框（prefill 上次的代號，方便自己快速按 Enter）
     let saved = null;
     try { saved = localStorage.getItem(LAST_TENANT_KEY); } catch {}
-    if (saved && !forceInput) {
-      location.replace('?t=' + encodeURIComponent(saved));
-    } else {
-      showEntryForm(saved || '');
-    }
+    showEntryForm(saved || '');
   }
 </script>
 </body>

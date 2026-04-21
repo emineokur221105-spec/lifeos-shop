@@ -8,9 +8,23 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
-    <!-- 開機流程：白名單驗證 + 載入租戶 Firebase config -->
+    <!-- 開機流程：白名單驗證 + 載入租戶 Firebase config + 解鎖旗標檢查 -->
     <script type="module">
       import { bootTenant } from './core/tenant-boot.js';
+
+      // 密碼關卡在 index.html 的 ⚙️ 系統設定 按鈕。對了會設一次性 token 再跳來。
+      // 這裡消費掉 token（用完刪掉），確保「重整 settings 或直接貼 URL」都得回 index 重新驗證密碼。
+      const tenantCodeFromUrl = new URLSearchParams(location.search).get('t');
+      if (tenantCodeFromUrl) {
+        const tokenKey = 'settings_unlock_token_' + tenantCodeFromUrl;
+        const token = sessionStorage.getItem(tokenKey);
+        if (!token) {
+          location.replace('./?t=' + encodeURIComponent(tenantCodeFromUrl));
+          throw new Error('settings requires unlock from index');
+        }
+        sessionStorage.removeItem(tokenKey);  // 一次性：用完即刪
+      }
+
       try {
         const tenant = await bootTenant();
         window.TENANT_FIREBASE_CONFIG = tenant.firebaseConfig;

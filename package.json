@@ -5,7 +5,7 @@
   "description": "LifeOS 門店工作管理系統（多租戶統一版）",
   "scripts": {
     "build": "node build.js",
-    "dev": "npx --yes http-server src -p 8080 -c-1 -o /?admin=0308"
+    "dev": "npx --yes http-server src -p 8080 -c-1 -o /admin.html?admin=0308"
   },
   "devDependencies": {
     "terser": "^5.36.0"
