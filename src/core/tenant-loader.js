@@ -29,6 +29,7 @@ export async function loadTenant(code) {
   return {
     code: code,
     name: tenant.name || code,
+    firebaseConfig: tenant.firebaseConfig,
     defaults: tenant.defaults || {},
     tenantApp: tenantApp,
     tenantDb: tenantDb

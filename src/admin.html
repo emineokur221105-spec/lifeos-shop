@@ -294,7 +294,7 @@
       '<label>Firebase Config (JSON) *</label>' +
       '<div>' +
         '<textarea id="f-config" rows="9" placeholder=\'{ "apiKey": "...", "authDomain": "...", "databaseURL": "...", "projectId": "...", ... }\'>' + esc(cfgStr) + '</textarea>' +
-        '<div class="field-hint">整包貼 Firebase console → 專案設定 → 你的應用程式 → 設定 的物件。</div>' +
+        '<div class="field-hint">可直接整段貼 Firebase console 複製的範例（含 <code>import</code> / <code>const firebaseConfig = {...}</code> / <code>getAnalytics</code> 都沒關係），系統會自動抽出 <code>{...}</code> 部分。</div>' +
       '</div>' +
       '<label>預設參數 (JSON)</label>' +
       '<div>' +
@@ -402,6 +402,34 @@
     }
   }
 
+  // 彈性解析 Firebase config：純 JSON / 整段 Google 複製範例（含 import、const firebaseConfig = {...}）都接受
+  function parseFirebaseConfigFlexible(raw) {
+    raw = (raw || '').trim();
+    if (!raw) throw new Error('內容為空');
+    // 先試純 JSON
+    try { return JSON.parse(raw); } catch {}
+    // 優先從 firebaseConfig = 之後開始找（避開最上面 import {...} 的大括號）
+    let searchFrom = 0;
+    const m = raw.match(/firebaseConfig\s*=\s*/);
+    if (m) searchFrom = m.index + m[0].length;
+    const startIdx = raw.indexOf('{', searchFrom);
+    if (startIdx < 0) throw new Error('找不到 { ... } 物件');
+    let depth = 0, endIdx = -1;
+    for (let i = startIdx; i < raw.length; i++) {
+      if (raw[i] === '{') depth++;
+      else if (raw[i] === '}') { depth--; if (depth === 0) { endIdx = i; break; } }
+    }
+    if (endIdx < 0) throw new Error('大括號未配對');
+    let obj = raw.slice(startIdx, endIdx + 1);
+    // key 加引號：{ apiKey: → { "apiKey":
+    obj = obj.replace(/([{,]\s*)([a-zA-Z_$][\w$]*)\s*:/g, '$1"$2":');
+    // 單引號字串轉雙引號
+    obj = obj.replace(/'([^'\\]*(\\.[^'\\]*)*)'/g, '"$1"');
+    // 尾逗號移除
+    obj = obj.replace(/,(\s*[}\]])/g, '$1');
+    return JSON.parse(obj);
+  }
+
   async function handleTenantSave() {
     const code = document.getElementById('f-code').value.trim();
     const name = document.getElementById('f-name').value.trim();
@@ -415,9 +443,9 @@
 
     let firebaseConfig, defaults;
     try {
-      firebaseConfig = JSON.parse(cfgRaw);
+      firebaseConfig = parseFirebaseConfigFlexible(cfgRaw);
     } catch (e) {
-      toast('Firebase config 不是合法 JSON', 'err'); return;
+      toast('Firebase config 解析失敗：' + (e.message || '請確認貼上內容包含 { ... } 物件'), 'err'); return;
     }
     if (!firebaseConfig.projectId || !firebaseConfig.databaseURL) {
       toast('Firebase config 缺少 projectId 或 databaseURL', 'err'); return;
