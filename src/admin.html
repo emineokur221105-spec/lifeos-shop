@@ -250,6 +250,7 @@
             '<td><code>' + esc(pid) + '</code></td>' +
             '<td class="row-actions">' +
               '<a class="btn small" href="./settings.html?t=' + encodeURIComponent(code) + '" target="_blank" rel="noopener" title="在新分頁開啟此租戶的系統設定">⚙️ 設定</a>' +
+              '<button class="btn small" data-act="tenant-copy" data-code="' + esc(code) + '" title="複製入口網址 + 密碼給客戶">📋 複製給客戶</button>' +
               '<button class="btn small" data-act="tenant-edit" data-code="' + esc(code) + '">編輯</button>' +
               '<button class="btn small err" data-act="tenant-del" data-code="' + esc(code) + '">刪除</button>' +
             '</td>' +
@@ -385,6 +386,9 @@
       else if (act === 'tenant-clear-pwd') {
         await handleClearPassword(btn.dataset.code);
       }
+      else if (act === 'tenant-copy') {
+        await handleCopyTenantInfo(btn.dataset.code);
+      }
       else if (act === 'wl-add') {
         await handleWhitelistAdd();
       }
@@ -490,6 +494,42 @@
       state.editingTenant.draft = JSON.parse(JSON.stringify(state.tenants[code] || {}));
     }
     render();
+  }
+
+  async function handleCopyTenantInfo(code) {
+    if (!code) return;
+    const t = state.tenants[code] || {};
+    const hasPwd = !!t.settingsPasswordHash;
+    // 從當前 admin 頁網址反推出首頁網址：/admin.html → /
+    const base = location.origin + location.pathname.replace(/\/admin\.html.*$/, '/');
+    const tenantUrl = base + '?t=' + encodeURIComponent(code);
+    const pwdLine = hasPwd
+      ? '系統設定密碼：（已自訂，請向管理員確認）'
+      : '系統設定密碼：1357';
+    const text =
+      '你的系統入口：\n' +
+      tenantUrl + '\n\n' +
+      pwdLine + '\n\n' +
+      '如需更改密碼請聯繫官方';
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('已複製！可直接貼給客戶', 'ok');
+    } catch (err) {
+      // fallback：navigator.clipboard 在舊環境 / 非 secure context 可能失效
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        toast('已複製！可直接貼給客戶', 'ok');
+      } catch (e) {
+        toast('複製失敗：' + (e.message || '瀏覽器不支援'), 'err');
+      }
+      ta.remove();
+    }
   }
 
   async function handleWhitelistAdd() {
