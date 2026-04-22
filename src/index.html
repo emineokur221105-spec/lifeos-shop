@@ -251,9 +251,7 @@
       console.error('[LifeOS] 啟動失敗', err);
       app.innerHTML =
         '<div class="msg err">❌ ' + (err && err.message ? err.message : '啟動失敗') + '</div>' +
-        '<button class="switch-tenant" id="reloadBtn">🔄 重新整理</button>' +
-        '<button class="switch-tenant" id="switchBtn" style="margin-left:8px;">↔️ 換別的租戶</button>';
-      document.getElementById('reloadBtn').addEventListener('click', () => location.reload());
+        '<button class="switch-tenant" id="switchBtn">🔄 換別的租戶</button>';
       document.getElementById('switchBtn').addEventListener('click', () => {
         try { localStorage.removeItem(LAST_TENANT_KEY); } catch {}
         location.href = '?pick';
