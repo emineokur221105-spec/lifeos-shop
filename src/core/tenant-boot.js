@@ -10,18 +10,6 @@
 import { loadWhitelist, loadTenant } from './tenant-loader.js';
 import './security.js'; // side-effect：註冊 window.LifeOSSecurity
 
-// 手機弱網時 Firebase get() 可能永遠 pending（沒預設 timeout）→ 畫面卡在「驗證授權中...」
-// 加 15 秒硬上限，逾時丟可讀錯誤，交給 index.html 的 catch 顯示重整按鈕
-function withTimeout(promise, ms, label) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(label + '（網路逾時，請檢查網路後重新整理）')), ms);
-    })
-  ]).finally(() => clearTimeout(timer));
-}
-
 export async function bootTenant(onStatus) {
   const params = new URLSearchParams(location.search);
   const code = params.get('t');
@@ -31,7 +19,7 @@ export async function bootTenant(onStatus) {
   }
 
   onStatus && onStatus('驗證授權中...');
-  const whitelist = await withTimeout(loadWhitelist(), 15000, '讀取白名單逾時');
+  const whitelist = await loadWhitelist();
   if (whitelist.length > 0) {
     await window.LifeOSSecurity.init({ allowedHashes: whitelist });
   } else {
@@ -39,7 +27,7 @@ export async function bootTenant(onStatus) {
   }
 
   onStatus && onStatus('載入租戶資料...');
-  const tenant = await withTimeout(loadTenant(code), 15000, '載入租戶逾時');
+  const tenant = await loadTenant(code);
   window.__lifeos_tenant = tenant;
   return tenant;
 }
