@@ -6,14 +6,14 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { getDatabase } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js';
 
 const mainFirebaseConfig = {
-  apiKey: 'AIzaSyD4TPDV30efPIni8RYu26RbpQ0yxNmCBpc',
-  authDomain: 'lifeos-shop-main.firebaseapp.com',
-  databaseURL: 'https://lifeos-shop-main-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId: 'lifeos-shop-main',
-  storageBucket: 'lifeos-shop-main.firebasestorage.app',
-  messagingSenderId: '283566726785',
-  appId: '1:283566726785:web:cd01f9d4a7562f61c8f780',
-  measurementId: 'G-DFH2XEQBMP'
+  apiKey: 'AIzaSyDsUsWuynci0DP71veuu19Ht8bJmhHSkHs',
+  authDomain: 'worktools-f53e5.firebaseapp.com',
+  databaseURL: 'https://worktools-f53e5-default-rtdb.firebaseio.com',
+  projectId: 'worktools-f53e5',
+  storageBucket: 'worktools-f53e5.firebasestorage.app',
+  messagingSenderId: '950551082090',
+  appId: '1:950551082090:web:3c2c4962b5ffa044aec613',
+  measurementId: 'G-EKPY3SC0BR'
 };
 
 export const mainApp = initializeApp(mainFirebaseConfig, 'main');
