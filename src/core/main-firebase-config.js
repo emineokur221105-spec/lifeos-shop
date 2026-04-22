@@ -6,14 +6,14 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { getDatabase } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js';
 
 const mainFirebaseConfig = {
-  apiKey: 'AIzaSyDsUsWuynci0DP71veuu19Ht8bJmhHSkHs',
-  authDomain: 'worktools-f53e5.firebaseapp.com',
-  databaseURL: 'https://worktools-f53e5-default-rtdb.firebaseio.com',
-  projectId: 'worktools-f53e5',
-  storageBucket: 'worktools-f53e5.firebasestorage.app',
-  messagingSenderId: '950551082090',
-  appId: '1:950551082090:web:3c2c4962b5ffa044aec613',
-  measurementId: 'G-EKPY3SC0BR'
+  apiKey: 'AIzaSyA-pdZT_sEwwB0nrOgq0-JtugyPx9Be6Qk',
+  authDomain: 'shop-system-v2.firebaseapp.com',
+  databaseURL: 'https://shop-system-v2-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId: 'shop-system-v2',
+  storageBucket: 'shop-system-v2.firebasestorage.app',
+  messagingSenderId: '861911239688',
+  appId: '1:861911239688:web:396e6a495b194de9c515bd',
+  measurementId: 'G-NPF5TH4Z15'
 };
 
 export const mainApp = initializeApp(mainFirebaseConfig, 'main');
