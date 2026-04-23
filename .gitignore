@@ -6,3 +6,12 @@ node_modules/
 .idea/
 dist/
 LOCAL_SECRETS.md
+
+# Claude Code 本機設定
+.claude/
+
+# 本機捷徑（Windows .url 檔）
+LifeOS 後台/
+
+# 手動備份檔
+*.backup-*
