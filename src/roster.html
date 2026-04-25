@@ -630,7 +630,7 @@
             const loc = settings.locations[member.location];
             const locBadge = (loc && loc.badge) ? loc.badge : '【?】';
 
-            nameSpan.innerHTML = `<small style="color:#aaa">${locBadge}</small> ${member.name || '未命名'}`;
+            nameSpan.innerHTML = `<small style="color:#aaa">${locBadge}</small> ${escapeAttr(member.name || '未命名')}`;
             li.onclick = () => loadMember(member.id);
 
             const statusBtn = document.createElement('button');
@@ -735,7 +735,7 @@
                 currentId = newRef.key;
                 if(isAuto) {
                     statusEl.innerText = "✅ 已同步";
-                    document.getElementById('editor-title').innerHTML = `正在編輯：${data.name} <span id="save-status" style="font-size:14px; color:#27ae60; font-weight:normal; margin-left:10px;">✅ 已同步</span>`;
+                    document.getElementById('editor-title').innerHTML = `正在編輯：${escapeAttr(data.name || '')} <span id="save-status" style="font-size:14px; color:#27ae60; font-weight:normal; margin-left:10px;">✅ 已同步</span>`;
                 } else {
                     showToast('✅ 已新增！');
                     window.createNewMember();
@@ -768,7 +768,7 @@
             if (!el) return;
             el.value = (data[f.id] != null) ? data[f.id] : '';
         });
-        document.getElementById('editor-title').innerHTML = `正在編輯：${data.name || ''} <span id="save-status" style="font-size:14px; color:#aaa; font-weight:normal; margin-left:10px;"></span>`;
+        document.getElementById('editor-title').innerHTML = `正在編輯：${escapeAttr(data.name || '')} <span id="save-status" style="font-size:14px; color:#aaa; font-weight:normal; margin-left:10px;"></span>`;
         window.closeSidebarOnMobile();
         window.filterList();
     };

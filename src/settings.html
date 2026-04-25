@@ -11,6 +11,7 @@
     <!-- 開機流程：白名單驗證 + 載入租戶 Firebase config + 解鎖旗標檢查 -->
     <script type="module">
       import { bootTenant } from './core/tenant-boot.js';
+      import { escapeHtml } from './core/common.js';
 
       // 密碼關卡在 index.html 的 ⚙️ 系統設定 按鈕。對了會設一次性 token 再跳來。
       // 這裡消費掉 token（用完刪掉），確保「重整 settings 或直接貼 URL」都得回 index 重新驗證密碼。
@@ -549,7 +550,7 @@ function renderAuntTags() {
     auntTags.forEach((name, i) => {
         const tag = document.createElement('span');
         tag.className = 'tag';
-        tag.innerHTML = `${name} <span class="tag-remove" onclick="removeAuntTag(${i})">×</span>`;
+        tag.innerHTML = `${escapeHtml(name)} <span class="tag-remove" onclick="removeAuntTag(${i})">×</span>`;
         container.insertBefore(tag, input);
     });
 }
@@ -586,7 +587,7 @@ function renderShareholders() {
     container.innerHTML = (currentConfig.officeShareholders || []).map((sh, i) => `
         <div class="shareholder-card">
             <span style="font-size:18px;">👤</span>
-            <input class="form-input sh-name" value="${sh.name}" placeholder="姓名" style="flex:1;">
+            <input class="form-input sh-name" value="${escapeHtml(sh.name)}" placeholder="姓名" style="flex:1;">
             <input class="form-input sh-pct" type="number" value="${sh.percent}" placeholder="%" style="width:80px; text-align:center;">
             <span style="color:var(--text-light);">%</span>
             <button class="btn-del-row" onclick="this.closest('.shareholder-card').remove()">×</button>
@@ -618,7 +619,7 @@ function renderExpenses() {
                 <option value="team" ${exp.type === 'team' ? 'selected' : ''}>🔴 團隊</option>
                 <option value="company" ${exp.type === 'company' ? 'selected' : ''}>🔵 公司</option>
             </select>
-            <input class="form-input" value="${exp.name}" placeholder="項目名稱" style="padding:8px;">
+            <input class="form-input" value="${escapeHtml(exp.name)}" placeholder="項目名稱" style="padding:8px;">
             <input class="form-input" type="number" value="${exp.amount}" placeholder="金額" style="padding:8px; text-align:right;">
             <button class="btn-del-row" onclick="this.closest('.expense-item-row').remove()">×</button>
         </div>

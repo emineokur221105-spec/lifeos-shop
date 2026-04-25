@@ -238,6 +238,7 @@
     // === LifeOS 統一版：Firebase 從租戶系統取得，不再硬編碼 ===
     import { ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
     import { bootTenant } from "./core/tenant-boot.js";
+    import { escapeHtml } from "./core/common.js";
 
     const tenant = await bootTenant();
     const db = tenant.tenantDb;
@@ -393,7 +394,8 @@
       const payerOptions = (currentPayer) => {
           let opts = `<option value="">選擇付款人</option>`;
           shareholders.forEach(sh => {
-              opts += `<option value="${sh.name}" ${currentPayer === sh.name ? 'selected' : ''}>${sh.name}</option>`;
+              const safeName = escapeHtml(sh.name);
+              opts += `<option value="${safeName}" ${currentPayer === sh.name ? 'selected' : ''}>${safeName}</option>`;
           });
           opts += `<option value="公款/其他" ${currentPayer === '公款/其他' ? 'selected' : ''}>公款/其他</option>`;
           return opts;
@@ -418,7 +420,7 @@
                     </select>
                 </div>
                 <div class="col-span-1 md:col-span-4">
-                    <input type="text" value="${exp.name}" onchange="window.updateExp(${i}, 'name', this.value)"
+                    <input type="text" value="${escapeHtml(exp.name)}" onchange="window.updateExp(${i}, 'name', this.value)"
                            class="input-box" placeholder="輸入項目名稱...">
                 </div>
                 <div class="col-span-1 md:col-span-2">
@@ -457,7 +459,7 @@
                     const displayName = item.name || '(未命名)';
                     return `
                     <div class="detail-item">
-                        <span class="truncate mr-2 text-slate-400">${displayName}</span>
+                        <span class="truncate mr-2 text-slate-400">${escapeHtml(displayName)}</span>
                         <span class="font-mono font-bold ${colorClass}">$${amt.toLocaleString()}</span>
                     </div>
                 `;
@@ -472,7 +474,7 @@
 
                 <div class="p-5 border-b border-slate-700 bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-xl">
                     <div class="flex items-center gap-3 mb-2">
-                        <input type="text" value="${sh.name}" onchange="window.updateSh(${idx}, 'name', this.value)"
+                        <input type="text" value="${escapeHtml(sh.name)}" onchange="window.updateSh(${idx}, 'name', this.value)"
                                class="font-bold text-xl text-white bg-transparent w-full focus:text-blue-400 outline-none">
                         <div class="flex items-center bg-slate-900 px-2 py-1 rounded-full border border-slate-700">
                             <input type="number" value="${sh.percent}" onkeyup="window.updateSh(${idx}, 'percent', this.value)"

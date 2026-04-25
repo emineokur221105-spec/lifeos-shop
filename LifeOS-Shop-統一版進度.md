@@ -1,4 +1,4 @@
-# LifeOS-Shop-統一版 專案狀態
+# LifeOS-Shop-統一版進度
 
 > Claude 新對話**只讀這份**。其他進度檔一律不再產生，避免誤讀。
 > 排序：舊 → 新（流水帳式，最底下永遠是最新）。
@@ -14,7 +14,7 @@
 ---
 
 ## 📍 當前狀態（一句話）
-**2026-04-23**：主 Firebase `shop-system-v2` 被移除 → 換成新建 `lifeos-maindoor`（asia-southeast1）；白名單 + 紙房子（`moneyhouse` / `worktools-f53e5`）租戶已重建；線上 `?t=moneyhouse` 入口正常，資料連通。
+**2026-04-25**：跨專案 bug review，LifeOS 拿到 3 項 🔴；修完 #4 XSS（9 檔 38 點 escapeHtml）+ #5 weekly 跨年 bug（抽 `inferYear()` helper）；#3 銷毀密碼升級 kabe 決定不改。**未跑 build 驗證**（Bash 工具當機）。
 
 ## 🌐 入口
 - 線上首頁：https://emineokur221105-spec.github.io/lifeos-shop/
@@ -278,6 +278,74 @@ f392b22 將 Firebase 設定變更為 lifeos-maindoor（Claude 透過 GitHub 網�
 - [ ] kabe 本機 Google Drive 版本已 `git reset --hard origin/main`，但本地有個 sibling commit `2c83960` 被淘汰，下次 `git log` 如果還看到再處理
 - [ ] （可選）統一 Google Drive 同步跟 git 的衝突：考慮改把 repo 移出 Google Drive、改用 macOS 的 iCloud 或 GitHub 作為唯一同步源（這個是架構決策，先記下）
 - [ ] （可選）admin 密碼從 `0308` 升級成新長 key（前代 4/20 只改了 LOCAL_SECRETS.md 沒動 code）
+
+---
+
+## 📝 本次完整記錄（2026-04-25）— 跨專案 bug review + 修補（XSS + 跨年 bug）
+
+### 背景
+kabe 要求「檢查所有專案 code 有沒有 bug 跟可優化的地方」。跨 5 個專案掃完，🔴（必修）共 5 項，LifeOS 拿到 3 項：#3 銷毀密碼、#4 XSS、#5 weekly 跨年週分組。kabe 決定 #3 不改，#4 #5 修。
+
+### #5 weekly.js 跨年週分組 bug
+**症狀**：`groupDatesByWeek()` 和 `getDayOfWeekStr()` 都把日期年份寫死當年（`new Date().getFullYear()`）。年底 12/30 跟 1/2 的資料會被算錯週、錯星期。
+
+**修法**：抽出 `inferYear(month)` helper：
+- `cleanupOldData` 只保留 14 天，所以跨年窗口最多 2 週
+- 規則：資料月份 - 當月份 > 6 → 視為去年（例：今年 1 月看到 11 月資料，當去年 11 月）
+- `groupDatesByWeek` 和 `getDayOfWeekStr` 都改用 `inferYear`
+
+### #4 XSS 全面修補（9 個檔 38 個插入點）
+
+| 檔案 | 改動點 | 重點修法 |
+|------|--------|---------|
+| `shop_data/schedule.js` | 3 | `staff.name/roomName/content` + region |
+| `shop_data/settlement.js` | 7 | `displayName/agentName/rawLine/extractedName/noteText`，順手刪 `copySingleSettlementToExcel` 沒用到的 `staffName` 參數消除 JS injection |
+| `shop_data/weekly.js` | 5 | `group.name/item.name/region/agent` |
+| `shop_data/app.js` | 5 | region × 4 / `svc.name` / `roomName` |
+| `admin.html` | 0 | 原作者已用 `esc()` 處理 ✅ |
+| `roster.html` | 3 | `member.name/data.name`（沿用既有 `escapeAttr`） |
+| `office.html` | 5 | `sh.name × 2 / exp.name × 2 / displayName` |
+| `weekly.html` | 9 | `name/aliases/acc.name/bankName/account/x.from/x.val/c` |
+| `settings.html` | 4 | aunt tag / `sh.name` / `exp.name` |
+
+**Import 路徑規則備忘**：
+- `src/shop/shop_data/*.js` → `import { escapeHtml } from '../../core/common.js';`
+- `src/*.html` → `import { escapeHtml } from './core/common.js';`
+- `roster.html` 沿用自己的 `escapeAttr()`，沒另外 import
+
+### 已知殘留（後續再修）
+1. **onclick 內 `'${user_input}'` JS injection**：例如 `onclick="switchRegion('${safeR}')"`。HTML escape 後 attribute decode 還是會回 `'`，JS 字串注入仍可能。徹底修要全改 `data-*` + `addEventListener`，工程較大，先列為 🟡 後續項
+2. **clipboard 寫 HTML**：`copyFullSettlementToExcel` / `copySingleSettlementToExcel` 是貼到 Excel 的 HTML 不是 DOM，未做 escape，風險低但仍是面
+
+### kabe 決定跳過的項目
+- **#2 親熱敏感資料搬家**：Bot Token / credentials.json / Telegraph token → kabe 認為 Drive 個人帳號沒分享、風險可接受，不搬
+- **#3 銷毀密碼升級**：`SYSTEM_PASSWORD = '8888'` 在 [state.js:43](src/shop/shop_data/state.js#L43) 留著，平常不會按到
+
+### ⚠️ 沒驗證 build
+本次想跑 `node build.js` 確認 9 個檔 syntax 沒打壞，但 Bash 工具 session 卡住（mkdir EEXIST 在 `~/.claude/session-env/<uuid>`）。**請 kabe 手動驗證**：
+
+```
+cd "C:\Users\makeo\我的雲端硬碟\Claude\專案\LifeOS-Shop-統一版"
+node build.js
+```
+
+或直接雙擊 `一鍵部署.bat`。如果 syntax 錯誤，把訊息貼給 Claude。
+
+### 坑 / 教訓
+- **「班表整理」改名**：親熱專案的 `班表整理/` 跟 LifeOS-Shop 的「排班」功能容易混（這次 review 我自己 confused 了一次），改成 `Telegram班表發佈`。LifeOS 這邊沒有需要對應改的東西，但**未來對 LifeOS 用「排班」一詞要小心**，可能跟親熱搞混
+- **Bash mkdir EEXIST**：可能跟 Google Drive 同步 `.claude/` 目錄有關（這個系統是 Drive 同步多台電腦），sibling Claude session 留下的 stale dir 重啟才能清
+
+### 本輪 commits（待 build 驗證後 commit）
+```
+（pending kabe 驗證）
+fix(weekly): 跨年週分組 + 星期計算改用 inferYear，避開把所有日期套當年的 bug
+fix(xss): 全頁面 escapeHtml — schedule/settlement/weekly/app + roster/office/weekly/settings 共 38 處
+```
+
+### 未結 / 待辦
+- [ ] kabe 跑 `node build.js` 驗證 → 沒錯誤就 commit + push
+- [ ] （可選）onclick 內 user input 改 `data-*` + `addEventListener`，徹底修 JS injection 殘留
+- [ ] （可選）clipboard 寫 HTML 也加 escape
 
 ---
 

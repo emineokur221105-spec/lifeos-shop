@@ -5,6 +5,7 @@ import {
   getRegionColor, playLoudAlarm, sendSystemNotification, showToast,
   getTodayDateStr,
 } from './utils.js';
+import { escapeHtml } from '../../core/common.js';
 
 let alertedTasks = new Set();
 let lastCheckedTime = '';
@@ -24,7 +25,8 @@ export function renderSidebar() {
     let regionOptions = '';
     state.REGIONS.forEach(r => {
       const selected = (staffRegion === r) ? 'selected' : '';
-      regionOptions += `<option value="${r}" ${selected}>${r}</option>`;
+      const safeR = escapeHtml(r);
+      regionOptions += `<option value="${safeR}" ${selected}>${safeR}</option>`;
     });
 
     const div = document.createElement('div');
@@ -37,14 +39,14 @@ export function renderSidebar() {
     const badgeBgColor = isAttending ? '#27ae60' : '#e74c3c';
 
     const roomBadge = staff.roomName
-      ? `<span onclick="copySingleAvailability(${staff.id})" style="cursor:pointer; background:${badgeBgColor}; color:white; padding:4px 6px; border-radius:4px; font-size:12px; margin-right:4px; font-weight:bold; white-space:nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.3);" title="點擊複製空檔">${staff.roomName}</span>`
+      ? `<span onclick="copySingleAvailability(${staff.id})" style="cursor:pointer; background:${badgeBgColor}; color:white; padding:4px 6px; border-radius:4px; font-size:12px; margin-right:4px; font-weight:bold; white-space:nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.3);" title="點擊複製空檔">${escapeHtml(staff.roomName)}</span>`
       : `<span onclick="copySingleAvailability(${staff.id})" style="cursor:pointer; background:${badgeBgColor}; color:white; padding:4px 6px; border-radius:4px; font-size:11px; margin-right:4px; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.3);" title="點擊複製空檔">📋複製</span>`;
 
     div.innerHTML = buildStaffCardHTML({
       index,
       staffId: staff.id,
-      staffName: staff.name || '',
-      staffContent: staff.content || '<span style="color:#ccc">編輯...</span>',
+      staffName: escapeHtml(staff.name || ''),
+      staffContent: staff.content ? escapeHtml(staff.content) : '<span style="color:#ccc">編輯...</span>',
       roomBadge,
       regionOptions,
       regionColor,

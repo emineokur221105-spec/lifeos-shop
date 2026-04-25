@@ -309,6 +309,7 @@
         import { ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
         import { bootTenant } from "./core/tenant-boot.js";
+        import { escapeHtml } from "./core/common.js";
 
         const tenant = await bootTenant();
         const db = tenant.tenantDb;
@@ -688,12 +689,12 @@
                                 <span class="slider"></span>
                             </label>
                         </td>
-                        <td style="font-weight:bold; color:#2c3e50;">${name}</td>
+                        <td style="font-weight:bold; color:#2c3e50;">${escapeHtml(name)}</td>
                         <td class="amt">${finalAmt.toLocaleString()}</td>
                         <td style="color:#555;">${bankDisplay}</td>
                         <td class="acc">
                             <div style="display:flex; align-items:center; justify-content:space-between;">
-                                <span>${accDisplay}</span>
+                                <span>${escapeHtml(accDisplay)}</span>
                                 <button class="btn-icon" onclick="window.openAccModal('${name}')" style="font-size:14px; margin-left:5px;">✏️</button>
                             </div>
                         </td>
@@ -721,7 +722,7 @@
 
                 const isMerged = p.aliases && p.aliases.length > 0;
                 const mergedClass = isMerged ? ' is-merged' : '';
-                const mergedBadge = isMerged ? `<span class="merge-badge" title="${p.aliases.join(', ')}">🔗 ${p.aliases.length}</span>` : '';
+                const mergedBadge = isMerged ? `<span class="merge-badge" title="${escapeHtml(p.aliases.join(', '))}">🔗 ${p.aliases.length}</span>` : '';
                 const mergeBtn = `<button class="merge-btn" onclick="event.stopPropagation(); window.openMergeModal('${encodeURIComponent(name)}')" title="合併到其他名字">🔗</button>`;
                 const unmergeBtn = isMerged ? `<button class="merge-btn" onclick="event.stopPropagation(); window.unmergeMaster('${encodeURIComponent(name)}')" title="拆開合併">✂️</button>` : '';
 
@@ -733,7 +734,7 @@
                 <div class="person-card ${cardStateClass}">
                     <div class="card-header ${headerStateClass}${mergedClass}">
                         <span style="display:flex; align-items:center; gap:4px;">
-                            <span class="clickable-name" onclick="window.copyToClipboard('${encodeURIComponent(name)}', '✅ 複製姓名：${name}')" title="點擊複製姓名">${name}</span>
+                            <span class="clickable-name" onclick="window.copyToClipboard('${encodeURIComponent(name)}', '✅ 複製姓名：${encodeURIComponent(name)}')" title="點擊複製姓名">${escapeHtml(name)}</span>
                             ${mergedBadge}
                             ${mergeBtn}${unmergeBtn}
                         </span>
@@ -752,9 +753,9 @@
                     if(arr.length > 0 || sum !== 0) {
                         const parts = arr.map(x => {
                             if (typeof x === 'object') {
-                                return x.from ? `<span class="alias-tag">(${x.from})</span>${x.val}` : `${x.val}`;
+                                return x.from ? `<span class="alias-tag">(${escapeHtml(x.from)})</span>${escapeHtml(String(x.val))}` : `${escapeHtml(String(x.val))}`;
                             }
-                            return `${x}`;
+                            return `${escapeHtml(String(x))}`;
                         }).join(', ');
                         html += `<tr><td class="col-day">${DAY_MAP[d]}</td><td class="col-data">${parts}</td><td class="col-subtotal">${sum}</td></tr>`;
                     }
@@ -768,8 +769,8 @@
                     <div class="account-display">
                         <div style="display:flex; align-items:center; gap:6px;">
                             <span style="color:#7f8c8d; font-size:14px;">🏦</span>
-                            <span style="font-weight:bold; color:#2c3e50;">${acc.bankName}</span> 
-                            <span style="font-family:monospace; font-size:14px; color:#2980b9; font-weight:bold;">${acc.account}</span>
+                            <span style="font-weight:bold; color:#2c3e50;">${escapeHtml(acc.bankName)}</span>
+                            <span style="font-family:monospace; font-size:14px; color:#2980b9; font-weight:bold;">${escapeHtml(acc.account)}</span>
                         </div>
                         <button class="btn-icon" onclick="window.toggleEdit('${safeNameId}')" title="展開卡片內編輯">✏️</button>
                     </div>`;
@@ -783,8 +784,8 @@
 
                 html += `
                         <div id="edit-area-${safeNameId}" class="edit-area">
-                            <input type="text" id="bank-${safeNameId}" value="${acc ? acc.bankName : ''}" placeholder="銀行 (例: 822 或 中信)">
-                            <input type="text" id="acc-${safeNameId}" value="${acc ? acc.account : ''}" placeholder="請輸入銀行帳號">
+                            <input type="text" id="bank-${safeNameId}" value="${acc ? escapeHtml(acc.bankName) : ''}" placeholder="銀行 (例: 822 或 中信)">
+                            <input type="text" id="acc-${safeNameId}" value="${acc ? escapeHtml(acc.account) : ''}" placeholder="請輸入銀行帳號">
                             <button class="btn-save-sync" onclick="window.saveCardAccount('${name}', '${safeNameId}')">💾 儲存並同步</button>
                         </div>
                         <button class="btn-copy-card" onclick="window.copyToClipboard('${encodeURIComponent(copyTxt)}')">📋 複製對帳單給 ${name}</button>
@@ -866,7 +867,7 @@
                 listDiv.innerHTML = '<div style="color:#95a5a6; text-align:center; padding:20px;">沒有其他名稱可以合併</div>';
             } else {
                 listDiv.innerHTML = candidates.map(c =>
-                    `<div style="padding:10px 12px; border-bottom:1px solid #f0f0f0; cursor:pointer; border-radius:6px;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''" onclick="window.confirmMerge('${encodeURIComponent(name)}','${encodeURIComponent(c)}')">→ <strong>${c}</strong></div>`
+                    `<div style="padding:10px 12px; border-bottom:1px solid #f0f0f0; cursor:pointer; border-radius:6px;" onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''" onclick="window.confirmMerge('${encodeURIComponent(name)}','${encodeURIComponent(c)}')">→ <strong>${escapeHtml(c)}</strong></div>`
                 ).join('');
             }
             $('mergeModal').style.display = 'flex';
@@ -924,10 +925,10 @@
                 if (filter && !acc.name.toLowerCase().includes(filter) && !acc.account.includes(filter)) return;
                 tbody.innerHTML += `
                     <tr>
-                        <td><strong>${acc.name}</strong></td>
+                        <td><strong>${escapeHtml(acc.name)}</strong></td>
                         <td>
-                            <div style="color:#2c3e50;">${acc.bankName}</div>
-                            <div style="font-family:monospace; color:#7f8c8d; margin-top:3px;">${acc.account}</div>
+                            <div style="color:#2c3e50;">${escapeHtml(acc.bankName)}</div>
+                            <div style="font-family:monospace; color:#7f8c8d; margin-top:3px;">${escapeHtml(acc.account)}</div>
                         </td>
                         <td>
                             <button class="btn-sm-action btn-edit" onclick="openAccModal('${acc.name}')">✏️</button>

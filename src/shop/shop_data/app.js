@@ -22,6 +22,7 @@ import {
   copyWeeklyReport,
 } from './weekly.js';
 import { SYSTEM_CONFIG, loadSystemConfig } from './config.js';
+import { escapeHtml } from '../../core/common.js';
 
 let currentDbUnsubscribe = null;
 let tempModalAttendance = true;
@@ -390,8 +391,9 @@ function renderRegionTabs() {
   let weeklyHtml = `<button class="region-btn ${state.currentWeeklyRegions.includes('All') ? 'active' : ''}" onclick="switchWeeklyRegion('All')">全部顯示</button>`;
 
   state.REGIONS.forEach(r => {
-    html += `<button class="region-btn ${state.currentRegion.includes(r) ? 'active' : ''}" onclick="switchRegion('${r}')">${r}</button>`;
-    weeklyHtml += `<button class="region-btn ${state.currentWeeklyRegions.includes(r) ? 'active' : ''}" onclick="switchWeeklyRegion('${r}')">${r}</button>`;
+    const safeR = escapeHtml(r);
+    html += `<button class="region-btn ${state.currentRegion.includes(r) ? 'active' : ''}" onclick="switchRegion('${safeR}')">${safeR}</button>`;
+    weeklyHtml += `<button class="region-btn ${state.currentWeeklyRegions.includes(r) ? 'active' : ''}" onclick="switchWeeklyRegion('${safeR}')">${safeR}</button>`;
   });
 
   if (scheduleContainer) scheduleContainer.innerHTML = html;
@@ -647,7 +649,7 @@ function renderServices() {
   state.services.forEach((svc, index) => {
     const div = document.createElement('div');
     div.className = 'service-row';
-    div.innerHTML = `<input type="text" value="${svc.name}" onchange="updateService(${index}, 'name', this.value)" ${state.isLocked ? 'disabled' : ''}><span>+</span><input type="number" value="${svc.price}" oninput="updateService(${index}, 'price', this.value)" step="100" ${state.isLocked ? 'disabled' : ''}><button class="btn-circle btn-red" style="width:18px; height:18px; font-size:12px; ${state.isLocked ? 'display:none;' : ''}" onclick="removeService(${index})">×</button>`;
+    div.innerHTML = `<input type="text" value="${escapeHtml(svc.name)}" onchange="updateService(${index}, 'name', this.value)" ${state.isLocked ? 'disabled' : ''}><span>+</span><input type="number" value="${svc.price}" oninput="updateService(${index}, 'price', this.value)" step="100" ${state.isLocked ? 'disabled' : ''}><button class="btn-circle btn-red" style="width:18px; height:18px; font-size:12px; ${state.isLocked ? 'display:none;' : ''}" onclick="removeService(${index})">×</button>`;
     container.appendChild(div);
   });
   initServicePanel();
@@ -837,7 +839,7 @@ function addNewRegion() {
   saveScheduleData();
   renderRegionTabs();
   const select = document.getElementById('roomConfigRegionSelect');
-  select.innerHTML = state.REGIONS.map(r => `<option value="${r}">${r}</option>`).join('');
+  select.innerHTML = state.REGIONS.map(r => { const s = escapeHtml(r); return `<option value="${s}">${s}</option>`; }).join('');
   select.value = newRegion;
   renderRoomConfigUI();
   showToast(`✅ 已新增大區域：${newRegion}`);
@@ -868,7 +870,7 @@ function openRoomConfigModal() {
   if (state.REGIONS.length === 0) {
     select.innerHTML = '<option value="">(空)</option>';
   } else {
-    select.innerHTML = state.REGIONS.map(r => `<option value="${r}">${r}</option>`).join('');
+    select.innerHTML = state.REGIONS.map(r => { const s = escapeHtml(r); return `<option value="${s}">${s}</option>`; }).join('');
     if (!state.currentRegion.includes('All') && state.currentRegion.length > 0 && state.REGIONS.includes(state.currentRegion[0])) {
       select.value = state.currentRegion[0];
     }
@@ -898,7 +900,7 @@ function renderRoomConfigUI() {
     return;
   }
   listContainer.innerHTML = rooms.map((roomName, index) =>
-    `<div style="display:flex; justify-content:space-between; align-items:center; background:#f4f6f9; padding:8px 12px; border-radius:6px; border:1px solid #ddd; margin-bottom:5px;"><span style="font-weight:bold; color:#2c3e50;">${roomName}</span><button onclick="removeRoomFromConfig('${region}', ${index})" style="background:transparent; border:none; color:#e74c3c; font-size:18px; cursor:pointer; font-weight:bold;">×</button></div>`
+    `<div style="display:flex; justify-content:space-between; align-items:center; background:#f4f6f9; padding:8px 12px; border-radius:6px; border:1px solid #ddd; margin-bottom:5px;"><span style="font-weight:bold; color:#2c3e50;">${escapeHtml(roomName)}</span><button onclick="removeRoomFromConfig('${escapeHtml(region)}', ${index})" style="background:transparent; border:none; color:#e74c3c; font-size:18px; cursor:pointer; font-weight:bold;">×</button></div>`
   ).join('');
 }
 

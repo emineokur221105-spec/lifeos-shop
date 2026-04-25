@@ -1,6 +1,7 @@
 // 周結與報表邏輯（週次獨立支出版）
 import { state } from './state.js';
 import { dbVal, dbUpdate, dbRemove } from './shop-db.js';
+import { escapeHtml } from '../../core/common.js';
 
 // 注入周結專屬 CSS（只注入一次）
 let cssInjected = false;
@@ -63,14 +64,23 @@ async function loadExpensesForActiveWeek() {
   renderExpenses();
 }
 
+// 推測日期的年份。cleanupOldData 只保留 14 天，所以資料年份就是「今年」或「去年底」兩種。
+// 資料月份比當月大超過 6（例：今年 1 月看到去年 11 月資料）視為去年。
+function inferYear(month) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  return (month - currentMonth > 6) ? currentYear - 1 : currentYear;
+}
+
 function groupDatesByWeek(dates) {
   state.weekRangesMap = {};
   state.weekRangeKeys = [];
-  const year = new Date().getFullYear();
   dates.forEach(dateStr => {
     const parts = dateStr.split('/');
     if (parts.length !== 2) return;
-    const d = new Date(year, parseInt(parts[0]) - 1, parseInt(parts[1]));
+    const month = parseInt(parts[0]);
+    const d = new Date(inferYear(month), month - 1, parseInt(parts[1]));
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
@@ -92,9 +102,10 @@ function groupDatesByWeek(dates) {
 }
 
 function getDayOfWeekStr(dateStr) {
+  const month = parseInt(dateStr.split('/')[0]);
   const d = new Date(
-    new Date().getFullYear(),
-    parseInt(dateStr.split('/')[0]) - 1,
+    inferYear(month),
+    month - 1,
     parseInt(dateStr.split('/')[1]),
   );
   return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
@@ -106,7 +117,8 @@ export function renderWeeklyRegionTabs() {
   let html = `<button class="region-btn ${state.currentWeeklyRegions.includes('All') ? 'active' : ''}" onclick="switchWeeklyRegion('All')">全部顯示</button>`;
   state.REGIONS.forEach(r => {
     const isActive = state.currentWeeklyRegions.includes(r);
-    html += `<button class="region-btn ${isActive ? 'multi-active' : ''}" onclick="switchWeeklyRegion('${r}')">${r}</button>`;
+    const safeR = escapeHtml(r);
+    html += `<button class="region-btn ${isActive ? 'multi-active' : ''}" onclick="switchWeeklyRegion('${safeR}')">${safeR}</button>`;
   });
   container.innerHTML = html;
 }
@@ -265,7 +277,7 @@ function calculateAndRenderSummaries() {
   set('week_agent_total', '$' + totals.agent.toLocaleString());
   let agentHtml = '';
   for (const [a, v] of Object.entries(breakdowns.agentMap)) {
-    if (v > 0) agentHtml += `<div class="breakdown-row"><span>${a}</span><span style="color:#c0392b; font-weight:bold;">$${v.toLocaleString()}</span></div>`;
+    if (v > 0) agentHtml += `<div class="breakdown-row"><span>${escapeHtml(a)}</span><span style="color:#c0392b; font-weight:bold;">$${v.toLocaleString()}</span></div>`;
   }
   setH('week_agent_breakdown', agentHtml || '<div style="color:#aaa; font-size:12px;">無經紀費支出</div>');
   updateFinalProfit(totals.dailyProfit);
@@ -281,7 +293,7 @@ function renderExpenses() {
     const itemsHtml = group.items.map((item, iIdx) => {
       groupTotal += parseInt(item.amount) || 0;
       return `<div class="expense-item-row">
-        <input type="text" value="${item.name}" placeholder="項目" style="flex:1;" onchange="updateExpense(${gIdx}, ${iIdx}, 'name', this.value)">
+        <input type="text" value="${escapeHtml(item.name)}" placeholder="項目" style="flex:1;" onchange="updateExpense(${gIdx}, ${iIdx}, 'name', this.value)">
         <span style="color:#95a5a6;">$</span>
         <input type="number" value="${item.amount}" placeholder="0" style="width:80px; text-align:right;" onchange="updateExpense(${gIdx}, ${iIdx}, 'amount', this.value)">
         <button class="btn-circle btn-red" style="width:20px; height:20px;" onclick="removeExpenseItem(${gIdx}, ${iIdx})">×</button>
@@ -292,7 +304,7 @@ function renderExpenses() {
     card.className = 'expense-card';
     card.innerHTML = `
       <div class="expense-header">
-        👤 <input type="text" value="${group.name}" onchange="updateExpenseGroup(${gIdx}, this.value)" style="border:none; background:transparent; font-weight:bold; width:80px;">
+        👤 <input type="text" value="${escapeHtml(group.name)}" onchange="updateExpenseGroup(${gIdx}, this.value)" style="border:none; background:transparent; font-weight:bold; width:80px;">
         <div style="display:flex; gap:10px; align-items:center;">
           <span>$${groupTotal.toLocaleString()}</span>
           <button class="btn-circle btn-red" style="width:20px; height:20px;" onclick="removeExpenseGroup(${gIdx})">×</button>

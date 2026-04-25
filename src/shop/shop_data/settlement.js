@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { getGlobalPricingTables, showToast, safeDateKey } from './utils.js';
 import { dbSet } from './shop-db.js';
+import { escapeHtml } from '../../core/common.js';
 
 let currentDailySummaryData = null;
 let renderSettleTimeout = null;
@@ -155,16 +156,18 @@ function executeRenderSettlementTable() {
     let regionOptions = '';
     state.REGIONS.forEach(r => {
       const selected = staffRegion === r ? 'selected' : '';
-      regionOptions += `<option value="${r}" ${selected}>${r}</option>`;
+      const safeR = escapeHtml(r);
+      regionOptions += `<option value="${safeR}" ${selected}>${safeR}</option>`;
     });
     const roomBadge = staff.roomName
-      ? `<span style="background:#2c3e50; color:#f1c40f; padding:2px 6px; border-radius:4px; font-size:12px; margin-right:5px; border: 1px solid #f1c40f;">${staff.roomName}</span>`
+      ? `<span style="background:#2c3e50; color:#f1c40f; padding:2px 6px; border-radius:4px; font-size:12px; margin-right:5px; border: 1px solid #f1c40f;">${escapeHtml(staff.roomName)}</span>`
       : '';
-    const displayName = staff.name || '未填寫';
+    const displayName = escapeHtml(staff.name || '未填寫');
 
     let html = buildCardHeaderHTML({
       staff, roomBadge, displayName, regionOptions, disableAttr, lockBg,
-      paramBtnClass, paramBtnStyle, hideBtnStyle, agentName, agentRate, staffAgentFee,
+      paramBtnClass, paramBtnStyle, hideBtnStyle,
+      agentName: escapeHtml(agentName), agentRate, staffAgentFee,
     });
 
     results.forEach(row => {
@@ -291,7 +294,7 @@ export function updateTotalsFromDOM() {
 
   let agent_summary_html = '';
   for (const [name, fee] of Object.entries(currentViewData.map)) {
-    agent_summary_html += `<div>${name}: $${fee.toLocaleString()}</div>`;
+    agent_summary_html += `<div>${escapeHtml(name)}: $${fee.toLocaleString()}</div>`;
   }
   document.getElementById('agent_fee_summary').innerHTML = agent_summary_html || '無';
 
@@ -360,7 +363,7 @@ export function copyAuntText() {
     .catch(() => showToast('❌ 複製失敗'));
 }
 
-export async function copySingleSettlementToExcel(staffId, staffName) {
+export async function copySingleSettlementToExcel(staffId) {
   const card = document.getElementById('settle-card-' + staffId);
   if (!card) return;
 
@@ -539,7 +542,7 @@ function buildCardHeaderHTML(p) {
     <div style="background:#f1c40f; padding:8px; display:flex; justify-content:space-between; align-items:center; min-width: 750px;">
       <div style="font-size:16px; font-weight:bold; color:#e74c3c; display:flex; align-items:center; gap:5px; white-space: nowrap;">
         ${p.roomBadge} ${p.displayName}
-        <button onclick="copySingleSettlementToExcel(${p.staff.id}, '${p.displayName}')" style="background:#27ae60; color:white; border:none; padding:4px 8px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px; margin-left:10px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">📊 複製Excel</button>
+        <button onclick="copySingleSettlementToExcel(${p.staff.id})" style="background:#27ae60; color:white; border:none; padding:4px 8px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px; margin-left:10px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">📊 複製Excel</button>
         <select onchange="updateStaffSettlement(${p.staff.id}, 'region', this.value)" ${p.disableAttr}
                 style="font-size:12px; padding:2px; margin-left:5px; border-radius:4px; border:1px solid #aaa; ${p.lockBg}">
           ${p.regionOptions}
@@ -587,14 +590,14 @@ function buildCardRowHTML(p) {
 
   return `
     <tr style="${rowStyle}">
-      <td style="padding:8px 5px; word-break: break-word; white-space: normal; line-height: 1.4; color:#2c3e50;">${row.isError ? '⚠️ ' : ''}${row.rawLine}</td>
-      <td style="text-align:center; font-size:14px; ${nameStyle}">${row.extractedName}</td>
+      <td style="padding:8px 5px; word-break: break-word; white-space: normal; line-height: 1.4; color:#2c3e50;">${row.isError ? '⚠️ ' : ''}${escapeHtml(row.rawLine)}</td>
+      <td style="text-align:center; font-size:14px; ${nameStyle}">${escapeHtml(row.extractedName)}</td>
       <td class="col-aunt editable-cell ${auntClass}" ${p.editAttr} onblur="saveOverride(${staff.id}, ${row.index}, 'aunt_disp', this)" style="text-align:center; font-size:15px; font-weight:bold; color:#2980b9; background:${normalCellBg}; border-left:1px dashed #eee;">${row.aunt_disp}</td>
       <td class="col-rev editable-cell ${revClass}" ${p.editAttr} onblur="saveOverride(${staff.id}, ${row.index}, 'revenue', this)" style="text-align:center; font-size:15px; font-weight:bold; color:#27ae60; background:${normalCellBg};">${row.revenue}</td>
       <td class="col-miss editable-cell ${missClass}" ${p.editAttr} onblur="saveOverride(${staff.id}, ${row.index}, 'total_miss', this)" style="text-align:center; color:#c0392b; background:${normalCellBg};">${row.total_miss}</td>
       <td class="col-bal" style="text-align:center; color:#555; font-weight:bold;">${row.balance}</td>
       <td class="col-work editable-cell ${workClass}" ${p.editAttr} onblur="saveOverride(${staff.id}, ${row.index}, 'work', this)" style="text-align:center; color:#d35400; font-weight:bold; background:${normalCellBg}; border-right:1px dashed #eee;">${row.work}</td>
-      <td class="editable-cell" ${p.editAttr} onblur="saveOverride(${staff.id}, ${row.index}, 'note', this)" style="text-align:center; color:#888; background:${p.isLocked ? '#f4f6f9' : '#fff'}; font-size:12px; word-break: break-word; white-space: normal;">${noteText}</td>
+      <td class="editable-cell" ${p.editAttr} onblur="saveOverride(${staff.id}, ${row.index}, 'note', this)" style="text-align:center; color:#888; background:${p.isLocked ? '#f4f6f9' : '#fff'}; font-size:12px; word-break: break-word; white-space: normal;">${escapeHtml(noteText)}</td>
     </tr>
   `;
 }
