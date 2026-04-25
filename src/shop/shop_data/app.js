@@ -1024,19 +1024,25 @@ function copySingleAvailability(staffId) {
   const parts = [prefixText + displayName];
 
   if (futureTasks.length === 0) {
-    if (!hasValidTasks) {
-      if ((staff.content || '').trim() === '') parts.push('現走');
-      else parts.push(`(${(staff.content || '').trim().replace(/\n/g, ' ')})`);
-    } else { parts.push('現走'); }
+    if (!hasValidTasks && (staff.content || '').trim() !== '') {
+      parts.push(`(${(staff.content || '').trim().replace(/\n/g, ' ')})`);
+    } else {
+      parts.push('現走');
+    }
   } else {
     const firstTask = futureTasks[0];
-    if (firstTask.start - nowMins >= 40) parts.push('現走');
+    const inFirstBooking = nowMins >= firstTask.start && nowMins < firstTask.end;
+    if (!inFirstBooking) parts.push('現在');
     futureTasks.forEach((t, i) => {
       const startStr = formatTimeDot(t.start);
       const endStr = formatTimeDot(t.end);
-      if (nowMins >= t.start && nowMins < t.end && i === 0) parts.push('目前有客');
-      else parts.push(`${startStr}有客`);
-      parts.push(`${endStr}可約`);
+      const inBooking = nowMins >= t.start && nowMins < t.end;
+      if (i === 0 && inBooking) {
+        parts.push(`${endStr}可約`);
+      } else {
+        parts.push(`${startStr}有客`);
+        parts.push(`${endStr}可約`);
+      }
     });
   }
   const textToCopy = parts.join(' ');
