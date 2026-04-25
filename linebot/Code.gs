@@ -275,8 +275,8 @@ function formatStaffAvailability(s, ctx) {
   } else {
     var firstTask = futureTasks[0];
     var inFirstBooking = nowMins >= firstTask.start && nowMins < firstTask.end;
-    // 現在可約 → 第一個 token 寫「現在」
-    if (!inFirstBooking) parts.push('現在');
+    // 現在可約 → 第一個 token 寫「現走」
+    if (!inFirstBooking) parts.push('現走');
     futureTasks.forEach(function (t, i) {
       var startStr = formatTimeDot(t.start);
       var endStr = formatTimeDot(t.end);

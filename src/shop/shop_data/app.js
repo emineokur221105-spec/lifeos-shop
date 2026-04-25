@@ -1032,7 +1032,7 @@ function copySingleAvailability(staffId) {
   } else {
     const firstTask = futureTasks[0];
     const inFirstBooking = nowMins >= firstTask.start && nowMins < firstTask.end;
-    if (!inFirstBooking) parts.push('現在');
+    if (!inFirstBooking) parts.push('現走');
     futureTasks.forEach((t, i) => {
       const startStr = formatTimeDot(t.start);
       const endStr = formatTimeDot(t.end);
