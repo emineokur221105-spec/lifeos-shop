@@ -972,6 +972,11 @@ function copySingleAvailability(staffId) {
     return (hh < 10 ? '0' + hh : hh) + '.' + (mm < 10 ? '0' + mm : mm);
   };
 
+  const closeEl = document.getElementById('closeHour');
+  const closeHour = closeEl ? (parseInt(closeEl.value) || 27) : 27;
+  const closeMins = closeHour * 60;
+  const nearClose = closeMins - nowMins < 20;
+
   const staff = state.staffData.find(s => s.id === staffId);
   if (!staff) return;
   const contentLines = (staff.content || '').split('\n');
@@ -1026,13 +1031,13 @@ function copySingleAvailability(staffId) {
   if (futureTasks.length === 0) {
     if (!hasValidTasks && (staff.content || '').trim() !== '') {
       parts.push(`(${(staff.content || '').trim().replace(/\n/g, ' ')})`);
-    } else {
+    } else if (!nearClose) {
       parts.push('現走');
     }
   } else {
     const firstTask = futureTasks[0];
     const inFirstBooking = nowMins >= firstTask.start && nowMins < firstTask.end;
-    if (!inFirstBooking) parts.push('現走');
+    if (!inFirstBooking && firstTask.start - nowMins >= 40 && !nearClose) parts.push('現走');
     futureTasks.forEach((t, i) => {
       const startStr = formatTimeDot(t.start);
       const endStr = formatTimeDot(t.end);

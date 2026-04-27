@@ -14,7 +14,7 @@
 ---
 
 ## 📍 當前狀態（一句話）
-**2026-04-25**：跨專案 bug review，LifeOS 拿到 3 項 🔴；修完 #4 XSS（9 檔 38 點 escapeHtml）+ #5 weekly 跨年 bug（抽 `inferYear()` helper）；#3 銷毀密碼升級 kabe 決定不改。**未跑 build 驗證**（Bash 工具當機）。
+**2026-04-27**：「現走」判斷加門檻 — 到下個客人 < 40 分 或 離下班 < 20 分 都不寫「現走」。網站 + bot 兩邊同步改。**待 kabe 跑 build + push、GAS 重新部署新版本**。前一輪未結項仍待補（GAS WHITELIST、regenerate LINE secret/token）。
 
 ## 🌐 入口
 - 線上首頁：https://emineokur221105-spec.github.io/lifeos-shop/
@@ -343,9 +343,131 @@ fix(xss): 全頁面 escapeHtml — schedule/settlement/weekly/app + roster/offic
 ```
 
 ### 未結 / 待辦
-- [ ] kabe 跑 `node build.js` 驗證 → 沒錯誤就 commit + push
+- [x] ~~kabe 跑 `node build.js` 驗證 → 沒錯誤就 commit + push~~（2026-04-26 隨 LINE bot 整合一起 build + commit，commits `02be413`/`ed2f075`）
 - [ ] （可選）onclick 內 user input 改 `data-*` + `addEventListener`，徹底修 JS injection 殘留
 - [ ] （可選）clipboard 寫 HTML 也加 escape
+
+---
+
+## 📝 本次完整記錄（2026-04-26）— LINE bot 整合 + 複製空檔格式統一
+
+### 背景
+kabe 工作流：客戶 LINE 私訊接單 → 整理成班表訊息 → 貼員工群組。痛點是還要手動貼網站。要做 bot：傳訊息給 bot 自動寫進網站。後來擴展加「查空檔」功能（現在誰可以、藝名空檔）。
+
+### 架構決定
+- **後端**：Google Apps Script (GAS) Web App。Vercel/Cloudflare 都要電話驗證或綁卡，kabe 不接受 → 退到 GAS（Gmail 直接登入）
+- **連 Firebase**：紙房子 `worktools-f53e5` RTDB REST API（rules 公開不需 service account）
+- **LINE channel**：`LifeOS 班表 bot`（Provider「LifeOS」, channel ID `2009895023`）
+
+### 程式檔
+- `linebot/Code.gs` — GAS source（kabe 貼進 GAS 編輯器）。本檔是 source of truth，雙向同步靠手動複製
+- `src/shop/shop_data/app.js`（[copySingleAvailability:962-1050](src/shop/shop_data/app.js#L962)）：複製空檔格式跟著 bot 改
+
+### Bot 功能
+
+**寫入班表**（私訊）：訊息首行 `A 4/25` 或 `A房 4/25` → 房號 + 日期；後續行為班表內容。bot 解析後覆蓋寫入 `shop_v8_daily_schedules/MM-DD/staffData[該員工].content`。沒房號 → bot 暫存 + 回問「哪間房？」5 分鐘內回房號就配對。
+
+**查詢空檔**（私訊或群組）：
+- `現在` / `空檔` / `誰有空` → 全員一行
+- `京鮑吟` / `京鮑吟空檔` → 單一員工（純中文 2-6 字直接當藝名）
+
+**群組**：必須 `bot ` 開頭觸發（LINE Official Account 不能被 @ 是 LINE 設計限制）。
+
+### 輸出格式（跟網站「複製空檔」按鈕一致）
+
+| 員工狀態 | 輸出 |
+|---------|------|
+| 完全沒 booking | `【莊二】京鮑吟 現走` |
+| 現在沒客 + 後續有客 | `【莊二】京鮑吟 現走 14.00有客 15.10可約` |
+| 現在有客 + 後續有客 | `【莊二】京鮑吟 15.10可約 16.00有客 17.10可約` |
+| 現在有客 + 沒後續 | `【莊二】京鮑吟 15.10可約` |
+
+格式經多次 iterate 最終定案：拿掉「目前有客」、「現走 ...」開頭詞，改成從「下次 transition」開始列。員工現在可約則加「現走」當第一個 token。bot + 網站兩邊輸出一字不差。
+
+### 關鍵實作細節（重要的避免重蹈覆轍）
+- **時間軸 cutoff = 11**：跟 [utils.js parseTime](src/shop/shop_data/utils.js#L21) 一致（< 11 點加 24）。我第一版用 openHour=12 做 cutoff，11 點和 12 點之間誤判 → 修。
+- **booking end = start + duration + 10 分緩衝**：給客人離開時間（從 [copySingleAvailability:1001](src/shop/shop_data/app.js#L1001) 來）
+- **task 合併規則**：相鄰 task 間隔 < 40 分合併。短空檔不算可約。
+- **日期 key**：`MM-DD` 格式（無年份）。`shop_v8_daily_schedules/04-25` 不是 `2026-04-25`。我第一版寫成 `YYYY-MM-DD` → 找不到資料。
+- **跨日營業**：紙房子 closeHour=27（=隔天 03:00），openHour=12。bot 不再加 lastBookMin（kabe 一度想要 01:30 接單截止，後來決定跟網站一致直接不加）。
+- **多 region 通吃**：kabe 確認房號永遠不重複（A/B/C/D 帝璽，215/615 響叮噹），bot 不過濾 region，房號直接對應 staffData[].roomName 找。
+- **regionPrefixes**：`帝璽 → 【莊二】`、`響叮噹 → 【民權】`、`北新 → 【北新】`。「東京-派工接單」是群組名（給客戶看的稱呼），跟系統內 region 不對應。
+
+### GAS 環境變數（指令碼屬性）
+| Property | 值 |
+|----------|-----|
+| `LINE_CHANNEL_ACCESS_TOKEN` | （從 LINE Console Messaging API tab 拿） |
+| `LINE_CHANNEL_SECRET` | 32 hex（Basic settings tab） |
+| `LINE_USER_ID_WHITELIST` | （留空 = 任何 user 都認；**建議補 kabe userId**） |
+| `FIREBASE_DB_URL` | `https://worktools-f53e5-default-rtdb.firebaseio.com` |
+| `FIREBASE_AUTH` | （留空，rules 公開） |
+| `TARGET_REGION` | （留空 = 全 region；單店時可填例「帝璽」） |
+| `DEBUG_LOG` | `1`（開 log；上線可關） |
+
+### 部署資訊
+- **GAS Web App URL**（webhook 終點）：`https://script.google.com/macros/s/AKfycbxCi.../exec`（部署 ID `AKfycbxCiaTaf6dM5BjcNmmmPbhRBcEFG-ch_TZ1MSHm22TTQmE9CG3bxcM-HXrght1k20BE`）
+- **LINE Webhook URL**：上述 GAS URL，已設定 + Verify 成功 + Use webhook on
+- **LINE Official Account Manager 設定**：聊天 / 自動回應訊息 / 加入好友歡迎訊息 → 全關；Webhook → 開；允許加入群組 → 開
+- 網站線上：https://emineokur221105-spec.github.io/lifeos-shop/
+
+### 坑 / 教訓（給下一次／給未來 Claude）
+- **括號文字當 value**：給 kabe 寫「（留空）」這種說明，他直接當 value 貼進去 → 觸發 whitelist/auth 邏輯擋掉訊息。**寫值範例要明確說「留完全空白」或乾脆刪除整筆屬性**。整個 LINE bot 第一次測試卡 30 分鐘就在這個。
+- **GAS 改 code 必須 Deploy → 管理 → 鉛筆 → 新版本**：不是直接生效。Script Properties 改了立即生效，但 code 改要建新版本部署。kabe 一度誤點「新增部署作業」拿到不同 URL，要回去找原 Web App 部署改版本才對。
+- **LINE Official Account 不能被 @**：本想用 mention（isSelf）偵測，行不通 → 改用 `bot ` 前綴觸發。設計時想先嘗試 mention，實際發現 LINE 不讓 OA 出現在 @ 候選清單。
+- **GAS 拒絕電話驗證/信用卡的非工程師路徑**：Vercel + Cloudflare 都跳電話驗證，Render 免費 plan 會 sleep 不適合 webhook，最後退到 GAS 是對的選擇（kabe 已有 Gmail，0 註冊摩擦）。
+- **時間欄位命名 m vs mon vs min**：第一版 `now.m` 同時當月份/分鐘 → 「現在時間」算錯（4 月某天 18:50 被當成 18:04，誤判員工還在接客）。教訓：類似縮寫盡量明確 (`mon`/`min`)，避免單字母歧義。
+- **紙房子 RTDB rules 公開**：bot 利用這點不用 service account 也能寫，但同時是 LifeOS-Shop 的安全弱點（任何人有 `databaseURL` 就能讀寫排班資料）。記下來，未來要改 auth 規則前 bot 要同步調整（加 Database secret 或 service account JWT）。
+- **WebFetch 拒讀紙房子業務內容**：debugging 時想 fetch staffData 看實際格式，API 端覺得內容敏感拒絕。改請 kabe 直接複製貼純文字。教訓：敏感業務資料 debug 走 kabe 提供樣本，不要靠工具直接拉。
+- **iterate 次數爆炸**：格式 v1→v10 多次來回（timeline / LifeOS 風格 / timeline+現在 / timeline+現走）。教訓：**先確認用戶想要什麼格式再寫 code**，不要自己猜。kabe 有時候訊息很短（「B」「現在是要改成現走才對哦」），要主動釐清意圖再動。
+- **commit 用明確檔名**：跑 `git add src/shop/shop_data/app.js linebot/`，不用 `git add .`，避免帶到不該 commit 的檔。
+
+### 本輪 commits
+```
+02be413 feat: 新增 LINE bot（GAS）+ 複製空檔格式統一
+ed2f075 fix: 複製空檔開頭詞「現在」改回「現走」
+```
+
+### 未結 / 待辦（kabe 安全收尾）
+- [ ] **補 LINE_USER_ID_WHITELIST**：去 GAS 執行記錄看「No whitelist set. Your userId is: U...」抄那串 32 字元（U 開頭），貼進 GAS 指令碼屬性 `LINE_USER_ID_WHITELIST`。避免別人偷推 bot。
+- [ ] **Regenerate Channel secret + access token**：本對話 chat log 有兩個密鑰原文（`db82917a...`、`BgxE+be5j...`）外洩風險。LINE Console → Basic settings 重發 secret、Messaging API tab 重發 access token，新值貼進 GAS 環境變數。舊值瞬間作廢。
+- [ ] （可選）`DEBUG_LOG` 從 `1` 改 `0` 關掉詳細 log（上線穩定後）
+
+---
+
+## 📝 本次完整記錄（2026-04-27）— 「現走」判斷加門檻
+
+### 背景
+kabe 實際使用發現 bug：班表是 `4/27 妹客13.30 40/2400-1`（13:30 客人 40 分），bot 還是寫「【民權】卡蜜拉 現走 13.30有客 14.20可約」。但離下個客人不到 40 分鐘根本走不了一單，「現走」誤導。
+
+### 修法
+原本判斷只看「現在不在客中」就寫「現走」。改成必須滿足：
+- 到下個客人 ≥ 40 分（跟既有「task 合併規則 < 40 分」一致）
+- 離下班 ≥ 20 分（kabe 補的條件，避免下班前還叫人「現走」）
+
+### 改動
+- [src/shop/shop_data/app.js](src/shop/shop_data/app.js) `copySingleAvailability`：
+  - 加 `closeMins`（從 `#closeHour` DOM 抓，fallback 27）+ `nearClose` flag
+  - `if (!inFirstBooking)` → `if (!inFirstBooking && firstTask.start - nowMins >= 40 && !nearClose)`
+  - 「沒未來 task」分支也加 `!nearClose` 守門
+- [linebot/Code.gs](linebot/Code.gs) `formatStaffAvailability`：
+  - `closeMins` 從 `ctx.closeHour` 拿（已存在，`buildCtx` 裡讀 `settings.closeHour`）
+  - 兩個分支同步改
+
+### 預期輸出對比
+| 情境 | 改前 | 改後 |
+|------|------|------|
+| 13:00 看，13:30 有客 | `現走 13.30有客 14.20可約` | `13.30有客 14.20可約` |
+| 02:50 看（closeHour=27 即 03:00），全天無客 | `現走` | （只剩名字） |
+| 13:00 看，14:00 有客（差 60 分） | `現走 14.00有客 15.10可約` | `現走 14.00有客 15.10可約`（不變）|
+
+### 本輪 commits（待 build + push）
+```
+fix: 「現走」加門檻 — 到下個客 <40 分或離下班 <20 分時不寫
+```
+
+### 未結 / 待辦
+- [ ] kabe 跑 `node build.js` 或雙擊 `一鍵部署.bat`，commit + push（`02be413` 之後 app.js 又動過）
+- [ ] kabe 把 `linebot/Code.gs` 貼回 GAS 編輯器 → 部署 → 管理 → 鉛筆 → 新版本（不是新增部署，URL 才不會變）
 
 ---
 

@@ -16,7 +16,14 @@
  *   FIREBASE_DB_URL
  *   FIREBASE_AUTH             （可選）
  *   TARGET_REGION             （可選）
+ *   GEMINI_API_KEY            （可選；翻譯用，沒填就 fallback 到 GAS 內建翻譯）
  *   DEBUG_LOG                 "1" 開啟 log
+ *
+ * 群組行為：
+ *   - "bot " 開頭     → 走查詢／班表寫入（同私訊）
+ *   - 無前綴+房號日期 → 自動寫班表
+ *   - 無前綴+中/泰文  → 中泰雙向翻譯
+ *   - 其他            → 不回應
  */
 
 const TZ = 'Asia/Taipei';
@@ -32,6 +39,7 @@ function getProps() {
     FIREBASE_DB_URL: (p.getProperty('FIREBASE_DB_URL') || '').replace(/\/$/, ''),
     FIREBASE_AUTH: p.getProperty('FIREBASE_AUTH') || '',
     TARGET_REGION: p.getProperty('TARGET_REGION') || '',
+    GEMINI_API_KEY: p.getProperty('GEMINI_API_KEY') || '',
     DEBUG_LOG: p.getProperty('DEBUG_LOG') === '1',
   };
 }
@@ -73,9 +81,24 @@ function handleEvent(event, props) {
 
   if (sourceType === 'group' || sourceType === 'room') {
     var rawTrimmed = text.replace(/^[\s\n]+|[\s\n]+$/g, '');
-    if (!/^bot([\s\n]|$)/i.test(rawTrimmed)) return;
-    text = rawTrimmed.replace(/^bot[\s\n]*/i, '');
-    if (props.DEBUG_LOG) console.log('group msg after strip prefix:', text);
+    if (/^bot([\s\n]|$)/i.test(rawTrimmed)) {
+      // bot 前綴 → 走原本邏輯（查詢、特殊指令）
+      text = rawTrimmed.replace(/^bot[\s\n]*/i, '');
+      if (props.DEBUG_LOG) console.log('group msg after strip prefix:', text);
+    } else {
+      // 無前綴 → 1) 試班表（房號+日期）2) 試翻譯 3) 都不是就忽略
+      var groupParsed = parseScheduleMessage(rawTrimmed);
+      if (groupParsed) {
+        var groupResult = writeScheduleToFirebase(groupParsed, props);
+        reply(replyToken, [{ type: 'text', text: groupResult.message }], props);
+        return;
+      }
+      var translated = translateMessage(rawTrimmed, props);
+      if (translated) {
+        reply(replyToken, [{ type: 'text', text: translated }], props);
+      }
+      return;
+    }
   } else {
     if (props.LINE_USER_ID_WHITELIST) {
       var allowed = props.LINE_USER_ID_WHITELIST.split(',').map(function (s) { return s.trim(); });
@@ -220,6 +243,8 @@ function queryStaff(ctx, queryName) {
 // =============================================================
 function formatStaffAvailability(s, ctx) {
   var nowMins = ctx.nowMins;
+  var closeMins = (ctx.closeHour != null ? ctx.closeHour : 27) * 60;
+  var nearClose = closeMins - nowMins < 20;
   var contentLines = (s.content || '').split('\n');
   var tasks = [];
 
@@ -269,14 +294,14 @@ function formatStaffAvailability(s, ctx) {
     // 沒未來 task → 整段空到下班
     if (!hasValidTasks && (s.content || '').trim() !== '') {
       parts.push('(' + (s.content || '').trim().replace(/\n/g, ' ') + ')');
-    } else {
+    } else if (!nearClose) {
       parts.push('現走');
     }
   } else {
     var firstTask = futureTasks[0];
     var inFirstBooking = nowMins >= firstTask.start && nowMins < firstTask.end;
-    // 現在可約 → 第一個 token 寫「現走」
-    if (!inFirstBooking) parts.push('現走');
+    // 現在可約 + 到下個客人 ≥ 40 分 + 離下班 ≥ 20 分 → 第一個 token 寫「現走」
+    if (!inFirstBooking && firstTask.start - nowMins >= 40 && !nearClose) parts.push('現走');
     futureTasks.forEach(function (t, i) {
       var startStr = formatTimeDot(t.start);
       var endStr = formatTimeDot(t.end);
@@ -533,6 +558,143 @@ function firebaseSet(path, data, props) {
     console.error('firebaseSet error:', code, res.getContentText());
     throw new Error('Firebase write failed: ' + code);
   }
+}
+
+// =============================================================
+// === 翻譯（中泰雙向）=========================================
+// =============================================================
+
+function translateMessage(text, props) {
+  if (!text) return null;
+  var hasThai = /[฀-๿]/.test(text);
+  var hasChinese = /[一-鿿]/.test(text);
+  if (!hasThai && !hasChinese) return null;
+
+  var direction = hasThai ? 'th2zh' : 'zh2th';
+
+  if (props.GEMINI_API_KEY) {
+    try {
+      return translateWithGemini(text, direction, props);
+    } catch (e) {
+      console.error('Gemini translate failed, fallback to LanguageApp:', e);
+    }
+  }
+  // Fallback：GAS 內建翻譯（品質較差但保證有譯文）
+  if (direction === 'th2zh') return LanguageApp.translate(text, 'th', 'zh-TW');
+  return LanguageApp.translate(text, 'zh-TW', 'th');
+}
+
+function translateWithGemini(text, direction, props) {
+  var directionNote = direction === 'th2zh'
+    ? '把以下泰文翻譯成台灣繁體中文'
+    : '把以下中文翻譯成泰文';
+
+  // === 行業術語對照表（必須遵守，之後新增請改這裡）============
+  // 格式：'泰文 / 縮寫 = 中文（備註）'，一行一條
+  // 來源：知識庫/翻譯機器人改善分析.md
+  var glossary = [
+    // --- 服務項目（無套相關）---
+    'nocon / โนคอน / ไม่มีคอน = 無套（絕對不能翻「沒有控制」「沒有缺點」）',
+    'หลั่งข้างใน / หลั่งใน = 內射',
+    'อมสด = 無套吹（口）',
+    // --- 服務項目（口/嘴）---
+    'ปากเป่า / อมปาก / แตกปาก = 口爆',
+    'จูบปาก = 親嘴',
+    'จูบแบบแลกลิ้น = 舌吻',
+    // --- 服務項目（其他）---
+    'มังกรพิษ / เลียก้น = 毒龍',
+    'ทวารหนัก / เอาก้น = 肛交（後門／走後門）',
+    'ฟองนม / เอาที่ร่องนม = 乳交（奶炮）',
+    'ให้แขกเลียจิ๋ม = 品鮑',
+    'แตกบนหน้า = 射顏',
+    'ถุงน่อง = 絲襪',
+    // --- 動作回報（注意：是回報狀態、不是命令）---
+    'In / 1in / 2in = 客人進房（第 N 位）',
+    'Out / ออก / ออกไป = 客人離開／服務結束（絕對不是「出去」）',
+    'เปิด / open / open door / เปิดประตู = 幫忙開大門（遠端門禁）',
+    // --- 角色稱呼 ---
+    'บอส / พี่ชาย = 老闆／派單哥（行業習慣，不是「哥哥」）',
+    'ลูกค้า = 客人',
+    // --- 工作場合委婉語（重要！）---
+    'น้องสาว（在工作對話中）= 私密處／陰道（絕對不能翻「妹妹」，會誤會成親妹妹）',
+    // --- 員工狀態 ---
+    'ประจำเดือน = 生理期／月經',
+    'พัก / พักกินข้าว = 休息吃飯（保留空檔）',
+    'ปิดงาน = 今日下班／不再接單',
+    'เก็บเงิน / รับเงิน = 收錢／結帳',
+  ];
+  // =============================================================
+
+  var glossaryBlock = glossary.length
+    ? '\n【行業術語對照（必須遵守）】\n' + glossary.join('\n') + '\n'
+    : '';
+
+  var prompt =
+    '你是中泰雙語翻譯助理，工作場合是【特種服務行業派單群組】（女員工在 A/C/D 房接客，老闆遠端派單與門禁）。\n' +
+    '最高原則：意思必須精準、不能誤導；其次才是語氣自然。\n' +
+    '\n' +
+    '【角色】\n' +
+    '- 老闆／派單員（中文）：派客、開大門、報價、結帳。指令簡潔，安撫員工時溫和。\n' +
+    '- 員工（泰籍女）：回報 in/out、收錢、生理狀況、突發狀況。對老闆極度禮貌（ค่ะ + 🙏）。\n' +
+    '\n' +
+    '【規則】\n' +
+    '- ' + directionNote + '\n' +
+    '\n' +
+    '【代詞絕對不能錯（最常見錯誤）】\n' +
+    '- 泰文 ฉัน = 我；คุณ / เธอ = 你\n' +
+    '- 泰文 เค้า / เขา = 他/她（在這群組常指「客人」），絕對不是「我」\n' +
+    '- 泰文 พวกเรา = 我們；พวกเค้า = 他們\n' +
+    '- 中文「他/她」絕對不能翻成 ฉัน/คุณ；中文「我」絕對不能翻成 เค้า/เขา\n' +
+    '- 例：「พอดีแบตเค้าหมด」= 剛好客人/他的電池沒電（不是「我的電池」）\n' +
+    '- 例：「เจ้านายเค้าโทตามกลับด่วน」= 客人的老闆催客人回去（不是「我老闆叫我回去」）\n' +
+    '- 主詞模糊時保留模糊，不要自作主張補主詞\n' +
+    '\n' +
+    '【常見陷阱（看到這些先警覺）】\n' +
+    '- 「วัด（寺廟）」很多時候是「บอส（老闆）」的打錯字，看上下文判斷\n' +
+    '- 「นก（鳥）」在工作對話中通常是員工的自稱／暱稱 Nok，不是動物\n' +
+    '- 「ตาย（死）」是感嘆詞「完蛋了／天啊」，不是真的死亡\n' +
+    '- 「น้องสาว（妹妹）」在工作對話中是「私密處」的委婉說法\n' +
+    '- 「In / Out」是員工回報客人進出房，不是叫人「進入／出去」\n' +
+    '- 「มอบความรู้สึก / มอบครั้งแรก（在客人語境下）」= 把第一次/初夜給她，不是「給感覺」\n' +
+    '\n' +
+    '【慣用語意譯】\n' +
+    '- 字面直譯會變怪話的詞組，用最接近原意的通順表達\n' +
+    '- 例：「ที่นั่งในใจ」字面是「心裡的座位」但實際指「掛心的事」\n' +
+    '- 翻完讀一遍，如果不通順就重翻\n' +
+    '\n' +
+    '【語氣】\n' +
+    '- 保留原文的正式程度（原文有 ค่ะ/🙏 等禮貌標記就翻得有禮、原文簡短指令就翻得簡短）\n' +
+    '- 不要主動加原文沒有的語尾詞（喔、啦、齁、นะ）或客套詞（請問、麻煩您）\n' +
+    '- 中性陳述句翻成中性陳述句\n' +
+    '\n' +
+    '【輸出】\n' +
+    '- 只回譯文，不要加說明、引號、前綴' +
+    glossaryBlock + '\n' +
+    '原文：\n' + text;
+
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' +
+    encodeURIComponent(props.GEMINI_API_KEY);
+  var payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.3 },
+  };
+  var res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+  var code = res.getResponseCode();
+  if (props.DEBUG_LOG) console.log('Gemini', code);
+  if (code !== 200) {
+    throw new Error('Gemini ' + code + ': ' + res.getContentText());
+  }
+  var data = JSON.parse(res.getContentText());
+  var output = data.candidates && data.candidates[0] && data.candidates[0].content
+    && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+    && data.candidates[0].content.parts[0].text;
+  if (!output) throw new Error('Gemini returned empty');
+  return String(output).trim();
 }
 
 function reply(replyToken, messages, props) {
