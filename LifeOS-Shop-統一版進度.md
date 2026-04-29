@@ -14,6 +14,12 @@
 ---
 
 ## 📍 當前狀態（一句話）
+**2026-04-29（移除 14 天自動清理 + weekly 改用 timestamp 取年份）**：[src/shop/shop_data/app.js](src/shop/shop_data/app.js) 刪掉 `cleanupOldData()` 函式定義 + 初始化呼叫；[src/shop/shop_data/weekly.js](src/shop/shop_data/weekly.js) `inferYear(month, dateStr)` 改成優先從 `state.rawWeeklyData` 對應 dateName 的 timestamp 取年份，找不到才退回月份猜測。LINE bot Code.gs 不動。資料從此永久保留，由租戶自己決定要不要刪。kabe go 後執行，未驗證部署。
+
+**2026-04-29（多租戶化方向已確定，待新 LINE 帳號到位再執行）**：純策略討論，沒寫 code。kabe 確認商業模型（同行小圈、4-20 人/家、現金交易、bot 為加購項目）後，決定走「方案 B+」：網頁端共用主 Firebase + Firebase Auth 登入 + Security Rules 自動隔離租戶 namespace；bot 仍 1 對 1 配置（加購客戶各配一份 GAS）但寫資料指向主 Firebase 的 `tenants/{TENANT_CODE}/` 前綴。**觸發條件：kabe 拿到新官方 LINE 帳號重新接 bot 時，順便一次完成 Firebase 整併 + 紙房子從 `worktools-f53e5` 搬家到主 Firebase + bot Code.gs 加 TENANT_CODE 邏輯**。詳細討論記錄在最底下「2026-04-29 續」段落。
+
+**2026-04-29（roster 各地點自訂段內文字）**：[src/roster.html](src/roster.html) 詳細版 sectionHead 加 `{note}` 變數，`settings.locations[code]` 加 `note` 欄位，每地點可在「📍 地點清單」點 ✏️ 開彈窗各自設定不接生客 / 消費條件等文字，空 note 自動消行。包含一次性 `migrateSectionHeadToNote()` 自動把現有 sectionHead 中段抽到所有地點 note 並寫回 Firebase。kabe 部署測過 OK。
+
 **2026-04-28（深夜 A+X 大改造）**：LINE bot 進化成**卡片管理介面**。`bot moneyhouse` 從文字清單升級成 LINE Flex Carousel（總覽卡 + 每群組一張卡 + 按鈕直接操作）；解綁 / 房號被覆蓋時舊群組自動進「停用」狀態，bot 徹底沉默直到 `bot 設定房號 X` 重啟；批次指令（`全部早安關閉` 等）、自訂排序（`排序 A B C`）、班表寫入失敗自動私訊 admin。早安時間從 12:40 改 12:30。kabe 紙房子規模 6 房（A/B/C/D/215/615）對應 LifeOS 排班，群組來來去去用「覆蓋」邏輯換綁。底下 2026-04-28 完整記錄保留前段，本次改動寫在最末三次追加區塊。
 
 **2026-04-28**：LINE bot 通知面大擴張 — (1) 寫班表回覆加泰文確認句「ตารางใหม่มาแล้ว...」；(2) **群組綁房號** `bot 設定房號 A`（重複設覆蓋）；(3) **早安叫醒** 12:40 自動推泰文起床訊息（群組獨立開關，預設關）；(4) **管理員面板** `bot moneyhouse`（動態列各群組房號/翻譯/早安狀態，原命名 `bot boss` 後改名為紙房子代號）；(5) **私訊用房號 reference 管理**（`A 早安開啟` / `A 翻譯關閉`）；(6) bot 加進群組自動發歡迎訊息引導設房號；(7) **解除綁定**（群組 `bot 解除綁定`、私訊 `A 解綁`，私訊版理由是 kabe 不想讓員工在群組看到自己設定）；(8) 房號**英文大小寫通用、內部統一存大寫**（中文房號不受影響）；(9) 私訊「無效指令」回覆精簡成兩行；(10) **翻譯加英文**：純英文 → 中文 + 泰文兩行；(11) **多行訊息逐行翻譯**：保留行結構、純符號行（`~~` 等）原樣保留；(12) Gemini prompt 加「保留標點符號」規則；(13) **白名單嚴格版（code 完成）**：加 `whoami` 指令拿 userId、`bot moneyhouse` 加授權檢查、未授權者群組裡完全靜默；BOSS_TEXT 末段顯示權限狀態。kabe 重新部署過、code 生效中。GAS time-based trigger（sendMorningCall 每 5 分鐘）+ LINE_USER_ID_WHITELIST 設定 kabe 自處理。歷久未結項仍待補（補 WHITELIST userId、regenerate LINE secret/token）。
@@ -771,6 +777,147 @@ kabe 想擴展 LINE bot **通知面**功能，列了四類選擇（員工群通�
 
 ### 本輪 commits
 （pending kabe 雙擊 `一鍵部署.bat` 推上去；改動只影響 GAS bot，不動網站；GAS 端已經透過貼上 + 重新部署生效）
+
+---
+
+## 📝 本次完整記錄（2026-04-29）— roster 各地點自訂段內文字
+
+### 背景
+kabe 紙房子目前 2 個地點（民權路、莊二街），詳細版公告 sectionHead 顯示「【 民權路 】❌❌❌不接生客\n需成功消費3次以上\n今日 1 位上班」這樣，但因為 sectionHead 是**全租戶共用一個模板**，靠 `{label}/{count}` 套變數，兩個地點顯示文字一樣 → kabe 想讓兩個地點各自能設不同的「不接生客 / 消費條件」文字。
+
+### 設計
+新增 `{note}` 變數路線（不是寫死兩個 header 也不是用 if/else），在 `settings.locations[code]` 加 `note` 欄位、sectionHead 模板改成 `【 {label} 】\n{note}\n今日 ({count}) 位上班`，每地點各自填 note。空 note 自動把那行整段消除（不留空白行）。只動詳細版，精簡版不動。
+
+### 改動清單（純動 [src/roster.html](src/roster.html)）
+1. `DEFAULT_LOCATIONS` 每筆加 `note: ''`
+2. `DEFAULT_TEMPLATES.detailed.sectionHead` 預設加入 `\n{note}\n` 那一行
+3. **自動遷移** `migrateSectionHeadToNote()`：onValue 載入 settings 後偵測 sectionHead 沒有 `{note}` → 抽出 `{label}` 行跟 `{count}` 行之間的中段當 note 塞進**所有** locations、sectionHead 重組為新格式、`set()` 寫回 Firebase。`_isMigratingSectionHead` 防 loop（且第二次 onValue 觸發時 sectionHead 已含 `{note}`會自動 return）
+4. 新 modal `loc-edit-modal`（label/badge/short + note 多行 textarea + 套用/取消）
+5. `renderLocationsTable` 每地點 row 加 ✏️ 按鈕（有 note 顯示 `📌`），暫存 `tr.dataset.note`；`addLocationRow` 同步加按鈕
+6. 新增 `openLocEditModal/closeLocEditModal/confirmLocEdit`：確認時把 modal 表單值寫回 row 的 input + dataset.note，提示「記得按💾儲存設定」
+7. 詳細版模板 hint 加 `{note}` 變數說明
+8. `buildSectionsByLocation`：tplReplace 帶 note；空 note 時用 regex `\n\{note\}(?=\n|$)` 把那行整段消除
+9. `saveSettings` 從 `tr.dataset.note` 收進 `newLocations[code].note`
+
+### 設計取捨備忘
+- **彈窗 vs 表格內 textarea**：選彈窗（kabe 選的）— 表格擠多行不好看
+- **自動遷移雲端 vs 不動**：選自動遷移（kabe 選的）— 一次性 migration 邏輯簡單、失敗也只影響一個 key、Admin 有完整備份功能可救
+- **共用 sectionHead + {note} 變數 vs 每地點獨立 sectionHead**：選共用模板配變數 — 排版一致、只差中段內容；獨立 sectionHead 太自由反而難維護
+- **空 note 處理**：選 regex 消除整行而不是留空行 — 視覺乾淨；用 `(?=\n|$)` lookahead 保證後續換行也吃掉
+- **note 變數注入順序**：用 `String(vars[k]) → m` 一次 pass replace，避免 noteVal 含 `{count}` 字面量被二次替換
+- **只改詳細版不動精簡版**：kabe 明確說只改詳細
+
+### 坑 / 教訓
+- 第一版差點把 sectionHead 換成 `【 {label} 】\n{note}\n今日 {count} 位上班`（中括號變單括號 `{count}` 漏 `()`），復查時對照舊預設修回 `({count})`
+- 遷移寫回 Firebase 後 onValue 會再觸發，但因為新 settings.detailed.sectionHead 已含 `{note}` 會自動跳過第二次寫入。實測沒 loop
+- `addLocationRow` 那段差點漏改（grep 才發現），新增地點若沒 ✏️ 按鈕會無法編輯 note → 補上
+
+### 未結 / 待辦
+- [x] kabe 部署測試「首次載入觸發遷移、改民權 note、產出公告兩地點開頭文字不同」全部通過
+
+### 本輪 commits
+- `b04ddb4 update`（2026-04-29 18:32，kabe 一鍵部署，連同 LINE bot A+X 大改造一併打包）
+- GitHub Actions 自動 build + deploy 已完成、線上版生效
+
+---
+
+## 📝 本次完整記錄（2026-04-29 續）— 多租戶化方向討論（純策略，沒寫 code）
+
+### 背景
+kabe 問「LifeOS 能不能正式上線租人？Zeabur 對我有沒有幫助？」→ 釐清商業模型 → 決定方案 → 暫不執行、等觸發條件。
+
+### kabe 商業模型（這次確認）
+- 客戶圈層：**同行小圈**（互信度高，不需嚴格防駭）
+- 規模：5-20 家、每家 4-20 人
+- 金流：現金口頭交易（不接金流 API）
+- 技術背景：kabe 只懂 Firebase，不懂後端
+- **LINE bot 為加購項目**（不是必備功能）→ 這個資訊把 bot 共用化的工程量砍掉
+
+### Zeabur 評估結論
+**用不到**。Zeabur 是 PaaS（適合放 Node.js 後端 + 自架資料庫），但 LifeOS 現在是「純前端 + Firebase BaaS」架構，沒有後端可放。Zeabur 唯一能用到的場景是「想做全自動建 Firebase 專案」，但 kabe 規模不需要走到那。
+
+### 確定方向：方案 B+
+**網頁端共用主 Firebase + Auth 自動隔離；bot 仍 1 對 1 配置但寫資料指向主 Firebase**
+
+架構：
+```
+所有租戶網頁 → 主 Firebase（Security Rules 自動隔離 tenants/{code}/）
+紙房子 bot   → 主 Firebase tenants/moneyhouse/...
+客戶A bot    → 主 Firebase tenants/客戶A/...   （加購時 kabe 配一份 GAS）
+```
+
+bot 的小改：Code.gs 5-8 個讀寫 Firebase 的地方加 `tenants/{TENANT_CODE}/` 前綴；ScriptProperty 多一個 `TENANT_CODE`；`FIREBASE_DB_URL` 全部統一指向主 Firebase。**bot 的 KNOWN_GROUPS / GROUP_ROOM_MAP / 翻譯開關 / 早安清單等 ScriptProperty 不動**（本來就存 GAS 自己這邊）。
+
+### 為什麼不走方案 C（bot 完全共用化）
+方案 C 工程量 8-12 天，要重構 ScriptProperty schema、加租戶辨識、分權看面板。bot 是加購（量少），不值得。方案 B+ 只要 5-8 天且風險低。
+
+### 觸發條件（重要，給未來 Claude 看）
+**kabe 等到新官方 LINE 帳號到位、需要重設 bot 那次，順便一次完成所有改動**：
+1. 紙房子資料從 `worktools-f53e5` 搬到主 Firebase `tenants/moneyhouse/...`（含停機 1-2 小時備份 + 搬移）
+2. 加 Firebase Auth 登入 UI（7 個 HTML 檔加登入閘）
+3. 寫 Security Rules（規則：`auth.token.tenant === $tenant`）
+4. Bot Code.gs 加 TENANT_CODE 邏輯
+5. Admin 加「新增租戶」自動發信 / 自動建 namespace 按鈕
+6. 紙房子 bot Code.gs 同步改造 + GAS 重新部署到新 LINE 帳號的 webhook
+
+預估工作量 5-8 天，主要風險在紙房子搬家那天（必須先用 admin 備份功能下載完整 JSON 才動）。
+
+### 設計取捨備忘
+- **資料隔離靠 Security Rules 而不是後端**：規則寫一份 Firebase 自己擋，省一台伺服器 + 不用 kabe 學 Node.js
+- **bot 保持 1 對 1 不共用**：加購量少，重構成本不划算；每加購客戶 kabe 花 10-15 分鐘配一份 GAS 即可
+- **`worktools-f53e5` 退役**：紙房子搬家後這個 Firebase 不再使用，避免「特殊個案」維護成本
+- **`?admin=0308` 連同 P2 的 Admin 密碼升級一起做**：方案 B+ 的 Firebase Auth 直接取代它
+
+### 未結 / 待辦
+- [ ] **觸發前不動**：等 kabe 拿到新官方 LINE 帳號通知 Claude
+- [ ] 觸發後第一步：用 admin 備份功能下載一份主 Firebase + 紙房子 `worktools-f53e5` 完整 JSON（雙保險）
+- [ ] 觸發後規劃詳細實作計畫再動手（不要直接寫 code）
+
+---
+
+## 📝 本次完整記錄（2026-04-29 續 2）— 移除 14 天自動清理 + weekly inferYear 改用 timestamp
+
+### 背景
+kabe 想保留所有歷史資料，由租戶自己決定要不要刪。原本 `cleanupOldData()` 每次開 shop 排班頁都跑一次、刪 14 天前的 `shop_v8_daily_schedules` 和 `shop_v8_daily_summaries`。
+
+### 副作用考量（為什麼要連動改 weekly.js）
+weekly.js 的 `inferYear(month)` 原本依賴「資料只留 14 天」這個前提，所以判斷規則寫得很簡單（資料月份比當月大超過 6 → 算去年）。拿掉清理後所有歷史資料都留著，光看月份猜不出年份（5 月可能是今年/去年/前年）→ 跨年週分組會錯亂。
+
+### 改動清單
+
+**[src/shop/shop_data/app.js](src/shop/shop_data/app.js)**
+1. 刪 `cleanupOldData()` 函式定義（原本 line 141-165）
+2. 刪初始化呼叫（原本 line 70 的 `cleanupOldData();`）
+
+**[src/shop/shop_data/weekly.js](src/shop/shop_data/weekly.js)**
+3. `inferYear(month)` → `inferYear(month, dateStr)`：先掃 `state.rawWeeklyData` 找 `entry.dateName === dateStr && entry.timestamp` 的那筆，從 timestamp 取年份；找不到才 fallback 用舊月份猜測邏輯（保護早期沒 timestamp 的資料）
+4. `groupDatesByWeek` 內呼叫改 `inferYear(month, dateStr)`
+5. `getDayOfWeekStr(dateStr)` 內呼叫改 `inferYear(month, dateStr)`
+
+### 為什麼 LINE bot Code.gs 不用改
+bot 寫的是 `shop_v8_daily_schedules`（每日排班），weekly.js 讀的是 `shop_v8_daily_summaries`（每日結算摘要，由 [settlement.js:305-315](src/shop/shop_data/settlement.js#L305-L315) 寫入時帶 `timestamp: Date.now()`）。weekly 的跨年判斷只看 summaries 的 timestamp，跟 bot 寫的 schedules 完全分離，bot 端不受影響。
+
+### 風險
+- **資料量**：每天一筆 summary、紙房子規模一年約 365 筆 × 幾 KB = 幾 MB，Firebase Spark 1GB 額度撐 100+ 年
+- **既有資料 0 影響**：不刪、不搬、不動
+- **早期沒 timestamp 的資料**：fallback 邏輯保留，行為跟改前一樣
+
+### 設計取捨
+- **不改 daily_schedules key 為 `YYYY-MM-DD`**：那會牽動 LINE bot Code.gs + 紙房子既有資料遷移，工程量大且風險高。改用 timestamp 取年份只動 weekly.js 內部，最小改動
+- **weekly.js fallback 保留舊邏輯**：不直接刪掉月份猜測，避免早期資料（無 timestamp）失效；新資料一律走 timestamp 路徑
+- **進度檔頂部不刪 `cleanupOldData` 歷史提及**（line 299 在 2026-04-25 跨年 bug 修補記錄裡）：那是脈絡，留著當歷史；只在當前狀態新增本次改動記錄
+
+### 已知過時文件（暫不更新）
+- [claude週結/ARCHITECTURE.md](claude週結/ARCHITECTURE.md) line 382 / 500 / 506 / 509 / 1151 還寫著 cleanupOldData 存在
+- 那份檔案在進度檔早期就標註「舊版週結系統架構筆記（參考用）」
+- 進度檔本身才是 authoritative，未來 Claude 誤讀的風險低
+
+### 未結 / 待辦
+- [ ] kabe 雙擊 `一鍵部署.bat` 推上去 → GitHub Actions 自動 build + deploy
+- [ ] 部署後驗證：開 shop 頁、開 weekly tab 看歷史資料能否正常顯示週結
+
+### 本輪 commits
+（pending kabe 雙擊 `一鍵部署.bat`）
 
 ---
 

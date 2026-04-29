@@ -67,7 +67,6 @@ export async function initSchedule() {
   }
 
   await loadSystemConfig();
-  cleanupOldData();
 
   try {
     const val = (await dbVal('shop_v8_global_settings')) || {};
@@ -136,32 +135,6 @@ export function emergencyWipe() {
   } else {
     alert('❌ 密碼錯誤！無法執行銷毀動作。');
   }
-}
-
-function cleanupOldData() {
-  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
-  dbVal('shop_v8_daily_schedules').then(data => {
-    data = data || {};
-    for (const key in data) {
-      let ts = data[key].timestamp;
-      if (!ts) {
-        const parts = key.split('-');
-        if (parts.length === 2) {
-          const d = new Date(new Date().getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
-          if (d.getTime() > Date.now() + 86400000) d.setFullYear(d.getFullYear() - 1);
-          ts = d.getTime();
-        } else { ts = Date.now(); }
-      }
-      if (ts < cutoff) dbRemove(`shop_v8_daily_schedules/${key}`);
-    }
-  });
-  dbVal('shop_v8_daily_summaries').then(data => {
-    data = data || {};
-    for (const key in data) {
-      const ts = data[key].timestamp;
-      if (ts && ts < cutoff) dbRemove(`shop_v8_daily_summaries/${key}`);
-    }
-  });
 }
 
 async function switchDate(newDateStr) {

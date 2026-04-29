@@ -64,9 +64,17 @@ async function loadExpensesForActiveWeek() {
   renderExpenses();
 }
 
-// 推測日期的年份。cleanupOldData 只保留 14 天，所以資料年份就是「今年」或「去年底」兩種。
-// 資料月份比當月大超過 6（例：今年 1 月看到去年 11 月資料）視為去年。
-function inferYear(month) {
+// 從 state.rawWeeklyData 對應 dateStr 的 timestamp 取年份。
+// 找不到 timestamp（早期資料）才退回月份猜測：資料月份比當月大超過 6 視為去年。
+function inferYear(month, dateStr) {
+  if (dateStr && state.rawWeeklyData) {
+    for (const k in state.rawWeeklyData) {
+      const entry = state.rawWeeklyData[k];
+      if (entry && entry.dateName === dateStr && entry.timestamp) {
+        return new Date(entry.timestamp).getFullYear();
+      }
+    }
+  }
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
@@ -80,7 +88,7 @@ function groupDatesByWeek(dates) {
     const parts = dateStr.split('/');
     if (parts.length !== 2) return;
     const month = parseInt(parts[0]);
-    const d = new Date(inferYear(month), month - 1, parseInt(parts[1]));
+    const d = new Date(inferYear(month, dateStr), month - 1, parseInt(parts[1]));
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
@@ -104,7 +112,7 @@ function groupDatesByWeek(dates) {
 function getDayOfWeekStr(dateStr) {
   const month = parseInt(dateStr.split('/')[0]);
   const d = new Date(
-    inferYear(month),
+    inferYear(month, dateStr),
     month - 1,
     parseInt(dateStr.split('/')[1]),
   );
