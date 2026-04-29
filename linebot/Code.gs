@@ -22,8 +22,13 @@
  * 群組行為：
  *   - "bot " 開頭     → 走查詢／班表寫入（同私訊）
  *   - 無前綴+房號日期 → 自動寫班表
- *   - 無前綴+中/泰文  → 中泰雙向翻譯
+ *   - 無前綴+中/泰文  → 中泰雙向翻譯（本群未關閉的話）
  *   - 其他            → 不回應
+ *
+ * 群組翻譯開關（每群獨立，預設開啟，存 ScriptProperties.TRANSLATE_DISABLED_GROUPS）：
+ *   - bot 關閉翻譯 / 關翻譯 / 停止翻譯
+ *   - bot 開啟翻譯 / 開翻譯 / 啟用翻譯
+ *   - bot 查詢翻譯 / 翻譯狀態
  */
 
 const TZ = 'Asia/Taipei';
@@ -70,6 +75,16 @@ function doGet() {
 }
 
 function handleEvent(event, props) {
+  // bot 被加進群組/聊天室 → 發歡迎訊息
+  if (event.type === 'join') {
+    handleJoinEvent(event, props);
+    return;
+  }
+  // 卡片按鈕觸發
+  if (event.type === 'postback') {
+    handlePostback(event, props);
+    return;
+  }
   if (event.type !== 'message' || !event.message || event.message.type !== 'text') return;
 
   var sourceType = event.source && event.source.type;
@@ -79,18 +94,89 @@ function handleEvent(event, props) {
 
   if (props.DEBUG_LOG) console.log('source:', sourceType, 'userId:', userId, 'text:', text);
 
+  var groupId = (event.source && (event.source.groupId || event.source.roomId)) || null;
+
   if (sourceType === 'group' || sourceType === 'room') {
     var rawTrimmed = text.replace(/^[\s\n]+|[\s\n]+$/g, '');
+
+    // 停用群組：bot 全靜默，僅允許「bot 設定房號 X」重啟
+    if (isGroupSuspended(groupId)) {
+      if (/^bot([\s\n]|$)/i.test(rawTrimmed)) {
+        var stripped = rawTrimmed.replace(/^bot[\s\n]*/i, '');
+        var bindRoom_s = detectRoomBindCommand(stripped);
+        if (bindRoom_s) {
+          reply(replyToken, [{ type: 'text', text: handleRoomBind(bindRoom_s, groupId) }], props);
+          return;
+        }
+      }
+      if (props.DEBUG_LOG) console.log('Group suspended, silent:', groupId);
+      return;
+    }
+
     if (/^bot([\s\n]|$)/i.test(rawTrimmed)) {
       // bot 前綴 → 走原本邏輯（查詢、特殊指令）
       text = rawTrimmed.replace(/^bot[\s\n]*/i, '');
+      rememberGroup(groupId);
       if (props.DEBUG_LOG) console.log('group msg after strip prefix:', text);
+
+      // 設定房號（群組專用）
+      var bindRoom = detectRoomBindCommand(text);
+      if (bindRoom) {
+        reply(replyToken, [{ type: 'text', text: handleRoomBind(bindRoom, groupId) }], props);
+        return;
+      }
+
+      // 解除綁定（群組專用）
+      if (detectUnbindCommand(text)) {
+        reply(replyToken, [{ type: 'text', text: handleUnbind(groupId) }], props);
+        return;
+      }
+
+      // 翻譯開關（群組專用）
+      var toggle = detectTranslateToggleCommand(text);
+      if (toggle) {
+        reply(replyToken, [{ type: 'text', text: handleTranslateToggle(toggle, groupId) }], props);
+        return;
+      }
+
+      // 早安開關（群組專用）
+      var morning = detectMorningToggleCommand(text);
+      if (morning) {
+        reply(replyToken, [{ type: 'text', text: handleMorningToggle(morning, groupId) }], props);
+        return;
+      }
+
+      // Whoami（誰都能用，回自己 userId）
+      if (detectWhoamiCommand(text)) {
+        reply(replyToken, [{ type: 'text', text: handleWhoami(userId) }], props);
+        return;
+      }
+
+      // Boss 管理員指令清單（whitelist 嚴格模式：未授權者完全靜默）
+      if (detectBossCommand(text)) {
+        if (!isBossAuthorized(userId, props)) {
+          if (props.DEBUG_LOG) console.log('Unauthorized boss attempt in group, userId:', userId);
+          return;
+        }
+        reply(replyToken, [buildBossFlex(props)], props);
+        return;
+      }
     } else {
+      rememberGroup(groupId);
       // 無前綴 → 1) 試班表（房號+日期）2) 試翻譯 3) 都不是就忽略
       var groupParsed = parseScheduleMessage(rawTrimmed);
       if (groupParsed) {
-        var groupResult = writeScheduleToFirebase(groupParsed, props);
-        reply(replyToken, [{ type: 'text', text: groupResult.message }], props);
+        try {
+          var groupResult = writeScheduleToFirebase(groupParsed, props);
+          reply(replyToken, [{ type: 'text', text: groupResult.message }], props);
+        } catch (e) {
+          notifyAdmin('⚠️ 班表寫入失敗\n房：' + groupParsed.roomLabel + ' / 日：' + groupParsed.dateStr + '\n錯誤：' + (e && e.message ? e.message : e) + '\n\n請重發班表', props);
+          console.error('Schedule write failed (group):', e);
+        }
+        return;
+      }
+      if (isTranslateDisabled(groupId)) {
+        if (props.DEBUG_LOG) console.log('translate disabled for group:', groupId);
         return;
       }
       var translated = translateMessage(rawTrimmed, props);
@@ -100,6 +186,13 @@ function handleEvent(event, props) {
       return;
     }
   } else {
+    // Whoami：whitelist 檢查之前處理，未授權者也能查自己 userId（給 kabe 第一次設 whitelist 用）
+    var prelimText = (text || '').replace(/^[\s\n]+|[\s\n]+$/g, '').replace(/^bot\s*/i, '');
+    if (detectWhoamiCommand(prelimText)) {
+      reply(replyToken, [{ type: 'text', text: handleWhoami(userId) }], props);
+      return;
+    }
+
     if (props.LINE_USER_ID_WHITELIST) {
       var allowed = props.LINE_USER_ID_WHITELIST.split(',').map(function (s) { return s.trim(); });
       if (allowed.indexOf(userId) === -1) {
@@ -112,6 +205,56 @@ function handleEvent(event, props) {
   }
 
   var trimmedText = text.replace(/^[\s\n]+|[\s\n]+$/g, '');
+
+  // Boss 管理員指令清單（私訊路徑）
+  if (detectBossCommand(trimmedText)) {
+    reply(replyToken, [buildBossFlex(props)], props);
+    return;
+  }
+
+  // 測試早安推送（私訊路徑，whitelist 已擋住外人）
+  if (detectTestMorningCommand(trimmedText)) {
+    var testResult = testMorningCall();
+    reply(replyToken, [{ type: 'text', text: '📤 早安測試發送結果：\n' + testResult }], props);
+    return;
+  }
+
+  // 批次指令（全部早安開關 / 全部翻譯開關 / 全部解綁）
+  var batchCmd = detectBatchCommand(trimmedText);
+  if (batchCmd) {
+    reply(replyToken, [{ type: 'text', text: handleBatchCommand(batchCmd) }], props);
+    return;
+  }
+
+  // 自訂排序（排序 A B C）
+  var orderList = detectOrderCommand(trimmedText);
+  if (orderList) {
+    reply(replyToken, [
+      { type: 'text', text: handleOrderCommand(orderList) },
+      buildBossFlex(props),
+    ], props);
+    return;
+  }
+
+  // 私訊用房號解綁（A 解綁 / 紙房子 解除綁定 等）
+  var adminUnbind = detectAdminUnbindCommand(trimmedText);
+  if (adminUnbind) {
+    reply(replyToken, [{ type: 'text', text: handleAdminUnbind(adminUnbind) }], props);
+    return;
+  }
+
+  // 私訊用房號 reference 管理（A 早安開啟 / B 翻譯關閉 等）
+  var adminCmd = detectAdminCommand(trimmedText);
+  if (adminCmd) {
+    reply(replyToken, [{ type: 'text', text: handleAdminCommand(adminCmd) }], props);
+    return;
+  }
+
+  // 0. 教學／說明（給群組老闆們快速看怎麼用）
+  if (detectHelpCommand(trimmedText)) {
+    reply(replyToken, [{ type: 'text', text: HELP_TEXT }], props);
+    return;
+  }
 
   // 1. 查詢類訊息
   var queryMode = detectQueryMode(trimmedText);
@@ -131,8 +274,13 @@ function handleEvent(event, props) {
       reply(replyToken, [{ type: 'text', text: '❌ 結合上一則訊息後仍解析失敗，請重傳完整班表' }], props);
       return;
     }
-    var resultP = writeScheduleToFirebase(parsedFromPending, props);
-    reply(replyToken, [{ type: 'text', text: resultP.message }], props);
+    try {
+      var resultP = writeScheduleToFirebase(parsedFromPending, props);
+      reply(replyToken, [{ type: 'text', text: resultP.message }], props);
+    } catch (e) {
+      notifyAdmin('⚠️ 班表寫入失敗\n房：' + parsedFromPending.roomLabel + ' / 日：' + parsedFromPending.dateStr + '\n錯誤：' + (e && e.message ? e.message : e) + '\n\n請重發班表', props);
+      console.error('Schedule write failed (pending):', e);
+    }
     return;
   }
 
@@ -149,13 +297,40 @@ function handleEvent(event, props) {
     }
     reply(replyToken, [{
       type: 'text',
-      text: '❓ 看不懂\n\n寫班表：\nA 4/25\n蒼華13.00 120/7400-3+nocon\n\n查詢：\n現在 / 空檔 / <藝名>',
+      text: '無效指令\n查詢:現在 空檔 <藝名>',
     }], props);
     return;
   }
 
-  var result = writeScheduleToFirebase(parsed, props);
-  reply(replyToken, [{ type: 'text', text: result.message }], props);
+  try {
+    var result = writeScheduleToFirebase(parsed, props);
+    reply(replyToken, [{ type: 'text', text: result.message }], props);
+  } catch (e) {
+    notifyAdmin('⚠️ 班表寫入失敗\n房：' + parsed.roomLabel + ' / 日：' + parsed.dateStr + '\n錯誤：' + (e && e.message ? e.message : e) + '\n\n請重發班表', props);
+    console.error('Schedule write failed (private):', e);
+  }
+}
+
+// =============================================================
+// === 教學／說明（bot 查詢）==================================
+// =============================================================
+
+var HELP_TEXT =
+  '📖 LifeOS bot 查詢指令\n' +
+  '\n' +
+  '查全部員工空檔：\n' +
+  'bot 現在\n' +
+  '\n' +
+  '查單一員工空檔：\n' +
+  'bot <藝名>\n' +
+  '例：bot 蒼華\n' +
+  '\n' +
+  '看這個說明：\n' +
+  'bot 查詢';
+
+function detectHelpCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  return /^(查詢|教學|說明|指令|help|Help|HELP)$/.test(t);
 }
 
 // =============================================================
@@ -180,18 +355,25 @@ function detectQueryMode(text) {
 // === 查詢執行 ================================================
 // =============================================================
 
+var OVERTIME_WARNING = '\n\n服務時間超過02.00需詢問是否能加班';
+
 function handleQuery(query, props) {
   var ctx = loadContext(props);
   if (!ctx) return '❌ 讀不到 LifeOS-Shop 設定';
-  if (query.mode === 'all') return queryAll(ctx);
-  if (query.mode === 'staff') return queryStaff(ctx, query.name);
+  if (query.mode === 'all') return queryAll(ctx) + OVERTIME_WARNING;
+  if (query.mode === 'staff') {
+    var staffResult = queryStaff(ctx, query.name);
+    // 找不到員工的錯誤訊息不加警告
+    if (staffResult.indexOf('❌') === 0) return staffResult;
+    return staffResult + OVERTIME_WARNING;
+  }
   return '❓ 未知查詢';
 }
 
 function loadContext(props) {
   var settings = firebaseGet('shop_v8_global_settings', props) || {};
   var openHour = settings.openHour != null ? Number(settings.openHour) : 12;
-  var closeHour = settings.closeHour != null ? Number(settings.closeHour) : 27;
+  var closeHour = 26;  // 寫死 02:00 下班（軸小時 26 = 隔日 02:00），無視網站 settings.closeHour
   var regionPrefixes = settings.regionPrefixes || {};
 
   var now = nowParts();
@@ -242,10 +424,19 @@ function queryStaff(ctx, queryName) {
 // === 員工空檔（完全照 LifeOS-Shop copySingleAvailability）====
 // =============================================================
 function formatStaffAvailability(s, ctx) {
+  var displayName = s.name || '未填寫';
+  var prefixText = ctx.regionPrefixes[s.region] || '';
+  var content = s.content || '';
+
+  // 班表寫了「約滿」→ 直接顯示「約滿」，不列細項
+  if (/約滿/.test(content)) {
+    return prefixText + displayName + ' 約滿';
+  }
+
   var nowMins = ctx.nowMins;
   var closeMins = (ctx.closeHour != null ? ctx.closeHour : 27) * 60;
   var nearClose = closeMins - nowMins < 20;
-  var contentLines = (s.content || '').split('\n');
+  var contentLines = content.split('\n');
   var tasks = [];
 
   contentLines.forEach(function (line) {
@@ -286,8 +477,6 @@ function formatStaffAvailability(s, ctx) {
   }
 
   var futureTasks = mergedTasks.filter(function (t) { return t.end > nowMins; });
-  var displayName = s.name || '未填寫';
-  var prefixText = ctx.regionPrefixes[s.region] || '';
   var parts = [prefixText + displayName];
 
   if (futureTasks.length === 0) {
@@ -505,7 +694,8 @@ function writeScheduleToFirebase(parsed, props) {
   return {
     ok: true,
     message: '✅ 已更新 ' + (target.roomName || parsed.roomLabel) +
-      (target.name ? '（' + target.name + '）' : '') + ' ' + parsed.dateStr,
+      (target.name ? '（' + target.name + '）' : '') +
+      '\nตารางใหม่มาแล้ว เช็กและตอบด้วยนะ',
   };
 }
 
@@ -561,6 +751,640 @@ function firebaseSet(path, data, props) {
 }
 
 // =============================================================
+// === 群組房號綁定 + 早安開關 + Boss 管理員指令 ===============
+// =============================================================
+// 設計：
+//   - GROUP_ROOM_MAP (JSON {groupId: roomLabel}) — 群組綁房號
+//   - KNOWN_GROUPS (JSON [groupId,...]) — bot 加入過/收過訊息的群組（給 boss 顯示用）
+//   - MORNING_CALL_ENABLED_GROUPS (csv) — 已開啟早安叫醒的群組
+//   - 重疊覆蓋：同一房號被新群組搶走時，舊群組變未綁定（kabe 要的「直接覆蓋」）
+
+function _getJsonProp(key, defaultValue) {
+  var raw = PropertiesService.getScriptProperties().getProperty(key);
+  if (!raw) return defaultValue;
+  try { return JSON.parse(raw); } catch (e) { return defaultValue; }
+}
+
+function _setJsonProp(key, value) {
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(value));
+}
+
+// --- 群組 ↔ 房號 ---
+function getGroupRoomMap() { return _getJsonProp('GROUP_ROOM_MAP', {}); }
+
+function getRoomByGroup(groupId) { return getGroupRoomMap()[groupId] || null; }
+
+function getGroupByRoom(roomLabel) {
+  var map = getGroupRoomMap();
+  for (var gid in map) if (map[gid] === roomLabel) return gid;
+  return null;
+}
+
+function setGroupRoom(groupId, roomLabel) {
+  if (!groupId || !roomLabel) return;
+  var map = getGroupRoomMap();
+  // 重疊覆蓋：同房號的別群被踢掉，並進入「停用」（bot 在那群組沉默直到重綁）
+  for (var gid in map) {
+    if (map[gid] === roomLabel && gid !== groupId) {
+      delete map[gid];
+      setGroupSuspended(gid, true);
+    }
+  }
+  map[groupId] = roomLabel;
+  _setJsonProp('GROUP_ROOM_MAP', map);
+}
+
+// --- 已知群組（給 boss 列清單用）---
+function getKnownGroups() { return _getJsonProp('KNOWN_GROUPS', []); }
+
+function rememberGroup(groupId) {
+  if (!groupId) return;
+  var list = getKnownGroups();
+  if (list.indexOf(groupId) === -1) {
+    list.push(groupId);
+    _setJsonProp('KNOWN_GROUPS', list);
+  }
+}
+
+// --- 停用群組（解綁後 bot 在該群組沉默，僅允許「設定房號」重啟）---
+function _getSuspendedGroups() {
+  var raw = PropertiesService.getScriptProperties().getProperty('SUSPENDED_GROUPS') || '';
+  return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+function isGroupSuspended(groupId) {
+  if (!groupId) return false;
+  return _getSuspendedGroups().indexOf(groupId) !== -1;
+}
+
+function setGroupSuspended(groupId, suspended) {
+  if (!groupId) return;
+  var list = _getSuspendedGroups();
+  var idx = list.indexOf(groupId);
+  if (suspended && idx === -1) list.push(groupId);
+  else if (!suspended && idx !== -1) list.splice(idx, 1);
+  PropertiesService.getScriptProperties().setProperty('SUSPENDED_GROUPS', list.join(','));
+}
+
+// --- 早安開啟群組 ---
+function _getMorningEnabledList() {
+  var raw = PropertiesService.getScriptProperties().getProperty('MORNING_CALL_ENABLED_GROUPS') || '';
+  return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+function isMorningEnabled(groupId) {
+  if (!groupId) return false;
+  return _getMorningEnabledList().indexOf(groupId) !== -1;
+}
+
+function setMorningEnabled(groupId, enabled) {
+  if (!groupId) return;
+  var list = _getMorningEnabledList();
+  var idx = list.indexOf(groupId);
+  if (enabled && idx === -1) list.push(groupId);
+  else if (!enabled && idx !== -1) list.splice(idx, 1);
+  PropertiesService.getScriptProperties().setProperty('MORNING_CALL_ENABLED_GROUPS', list.join(','));
+}
+
+// === 設定房號指令（群組裡打 bot 設定房號 X）===
+function detectRoomBindCommand(text) {
+  var t = (text || '').replace(/^\s+|\s+$/g, '');
+  // 動詞在前：設定房號 A / 綁定房號 A / 編號 A / 設房號 A / 綁定 A / 綁 A
+  var m1 = t.match(/^(?:設定房號|綁定房號|編號|設房號|綁定|綁)\s*(\S{1,10})$/);
+  if (m1) return m1[1].trim().toUpperCase();
+  // 動詞在後：A 綁定 / A 綁
+  var m2 = t.match(/^(\S{1,10})\s+(?:綁定|綁)$/);
+  if (m2) return m2[1].trim().toUpperCase();
+  return null;
+}
+
+function handleRoomBind(roomLabel, groupId) {
+  if (!groupId) return '❌ 此指令只能在群組使用';
+  var prevRoom = getRoomByGroup(groupId);
+  var prevHolder = getGroupByRoom(roomLabel);
+  var wasSuspended = isGroupSuspended(groupId);
+  setGroupRoom(groupId, roomLabel);
+  rememberGroup(groupId);
+  setGroupSuspended(groupId, false); // 重綁解除停用，bot 重新運作
+  var msg = '✅ 本群組已綁定房號「' + roomLabel + '」';
+  if (wasSuspended) msg += '\n（已重新啟用，bot 會回應翻譯/班表）';
+  if (prevRoom && prevRoom !== roomLabel) msg += '\n（原房號「' + prevRoom + '」已釋出）';
+  if (prevHolder && prevHolder !== groupId) msg += '\n（原「' + roomLabel + '」房群組已自動進入停用，bot 在那群組沉默直到重新綁定）';
+  return msg;
+}
+
+// === 解除綁定指令 ===
+function detectUnbindCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  return /^(解除綁定|取消綁定|解除房號|取消房號|解綁|清除房號|移除房號)$/.test(t);
+}
+
+function handleUnbind(groupId) {
+  if (!groupId) return '❌ 此指令只能在群組使用';
+  var map = getGroupRoomMap();
+  var prev = map[groupId];
+  // 即使沒綁過也徹底清空，避免「未綁定群組」掛在面板上
+  delete map[groupId];
+  _setJsonProp('GROUP_ROOM_MAP', map);
+  // 清翻譯狀態（變回預設「翻譯開啟」）
+  setTranslateDisabled(groupId, false);
+  // 清早安狀態（變回預設「早安關閉」）
+  setMorningEnabled(groupId, false);
+  // 從 KNOWN_GROUPS 移除（除非有新訊息+重綁才加回）
+  var known = getKnownGroups();
+  var idx = known.indexOf(groupId);
+  if (idx !== -1) {
+    known.splice(idx, 1);
+    _setJsonProp('KNOWN_GROUPS', known);
+  }
+  // 加進「停用清單」 — bot 在該群組除了「重設房號」之外都不回應
+  setGroupSuspended(groupId, true);
+  if (!prev) return '✅ 已從面板清空 + 該群組停用（bot 沉默直到重設房號）';
+  return '✅ 已解除「' + prev + '」房綁定\n翻譯 / 早安 / 班表寫入 全部失效\n要重啟：在該群組打 bot 設定房號 X';
+}
+
+// === 早安開關指令 ===
+function detectMorningToggleCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  if (/^(早安開啟|開啟早安|開早安|啟用早安)$/.test(t)) return 'on';
+  if (/^(早安關閉|關閉早安|關早安|停止早安)$/.test(t)) return 'off';
+  if (/^(早安狀態|早安|查詢早安)$/.test(t)) return 'status';
+  return null;
+}
+
+function handleMorningToggle(toggle, groupId) {
+  if (!groupId) return '❌ 此指令只能在群組使用';
+  if (toggle === 'on') {
+    setMorningEnabled(groupId, true);
+    return '✅ 已開啟本群早安叫醒\n每天約 12:30 自動發送泰文起床訊息';
+  }
+  if (toggle === 'off') {
+    setMorningEnabled(groupId, false);
+    return '✅ 已關閉本群早安叫醒';
+  }
+  return '本群早安：' + (isMorningEnabled(groupId) ? '開啟（每天 12:30 推送）' : '關閉');
+}
+
+// === Whoami（任何人都能用，回 userId 給 kabe 設 whitelist 用）===
+function detectWhoamiCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  return /^(whoami|我的id|我的userid|查id|查userid|whoamI)$/i.test(t);
+}
+
+function handleWhoami(userId) {
+  if (!userId) return '❌ 抓不到 userId（這個訊息來源沒有 user 身分）';
+  return '你的 userId：\n' + userId + '\n\n（複製這串，貼進 GAS 的指令碼屬性 LINE_USER_ID_WHITELIST，多人用逗號分隔）';
+}
+
+// === Boss 授權（whitelist 模式）===
+// LINE_USER_ID_WHITELIST 為空 = 寬鬆，誰都能看 boss
+// 有設 = 嚴格，只有清單內 userId 能看；其他人完全靜默
+function isBossAuthorized(userId, props) {
+  if (!props.LINE_USER_ID_WHITELIST) return true;
+  var allowed = props.LINE_USER_ID_WHITELIST.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  return allowed.indexOf(userId) !== -1;
+}
+
+// === 測試早安推送（私訊指令）===
+function detectTestMorningCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  return /^(測試早安|早安測試|test早安|早安test|testmorning|morningtest)$/i.test(t);
+}
+
+// === Boss 管理員指令 ===
+function detectBossCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  return /^moneyhouse$/i.test(t);
+}
+
+function buildBossText(props) {
+  cleanupStaleStatus(); // 開面板前先清 stale
+  var map = getGroupRoomMap();
+  var known = getKnownGroups();
+  var disabled = _getDisabledGroupList();
+  var enabled = _getMorningEnabledList();
+  var whitelist = props && props.LINE_USER_ID_WHITELIST
+    ? props.LINE_USER_ID_WHITELIST.split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+    : [];
+
+  var lines = ['📋 管理員指令', ''];
+
+  lines.push('【目前群組狀態】');
+  if (known.length === 0) {
+    lines.push('（沒有已加入的群組）');
+  } else {
+    // 已綁房號的排前面，未綁的排後面
+    var bound = [], unbound = [];
+    known.forEach(function (gid) { (map[gid] ? bound : unbound).push(gid); });
+    bound.sort(function (a, b) { return map[a] < map[b] ? -1 : 1; });
+    bound.forEach(function (gid) {
+      var translateOn = disabled.indexOf(gid) === -1;
+      var morningOn = enabled.indexOf(gid) !== -1;
+      lines.push(map[gid] + ' 房：翻譯 ' + (translateOn ? '開' : '關') + ' / 早安 ' + (morningOn ? '開' : '關'));
+    });
+    unbound.forEach(function (gid) {
+      var translateOn = disabled.indexOf(gid) === -1;
+      var morningOn = enabled.indexOf(gid) !== -1;
+      lines.push('未綁定 (...' + gid.slice(-6) + ')：翻譯 ' + (translateOn ? '開' : '關') + ' / 早安 ' + (morningOn ? '開' : '關'));
+    });
+  }
+  lines.push('');
+
+  lines.push('【寫班表（私訊我）】');
+  lines.push('A 4/25');
+  lines.push('紙房子13.00 120/7400-3+nocon');
+  lines.push('');
+
+  lines.push('【查空檔】');
+  lines.push('群組：bot 現在 / bot <藝名>');
+  lines.push('私訊:現在 / <藝名>（不用前綴）');
+  lines.push('');
+
+  lines.push('【群組設定（群組裡打）】');
+  lines.push('bot 設定房號 A');
+  lines.push('bot 解除綁定');
+  lines.push('bot 早安開啟 / 關閉 / 狀態');
+  lines.push('bot 開啟翻譯 / 關閉翻譯 / 翻譯狀態');
+  lines.push('');
+
+  lines.push('【私訊管理（用房號）】');
+  lines.push('A 早安開啟 / 關閉');
+  lines.push('A 翻譯開啟 / 關閉');
+  lines.push('A 解綁');
+  lines.push('測試早安（立即推送一次）');
+  lines.push('');
+
+  lines.push('【看這份清單】');
+  lines.push('bot moneyhouse');
+  lines.push('');
+
+  lines.push('【權限狀態】');
+  if (whitelist.length === 0) {
+    lines.push('⚠️ 未設白名單（誰都看得到此面板）');
+    lines.push('設定步驟：');
+    lines.push('1) 私訊 bot 打 whoami → 抄 userId');
+    lines.push('2) GAS 指令碼屬性 LINE_USER_ID_WHITELIST 貼上');
+    lines.push('3) 重新部署');
+  } else {
+    lines.push('✅ 白名單已設（' + whitelist.length + ' 位管理員）');
+    whitelist.forEach(function (u) {
+      lines.push('  ...' + u.slice(-6));
+    });
+  }
+
+  return lines.join('\n');
+}
+
+// === Boss 卡片版（Flex Message）===
+// 結構：carousel 1 張總覽 + 6 張群組卡（已綁優先、未綁次之），最多 12 張（LINE limit）
+// 清理 stale 資料：把不在 KNOWN_GROUPS 的 groupId 從翻譯/早安清單踢掉
+// 防止舊資料導致統計算成負數
+function cleanupStaleStatus() {
+  var known = getKnownGroups();
+  var disabled = _getDisabledGroupList().filter(function (g) { return known.indexOf(g) !== -1; });
+  var enabled = _getMorningEnabledList().filter(function (g) { return known.indexOf(g) !== -1; });
+  var sp = PropertiesService.getScriptProperties();
+  sp.setProperty('TRANSLATE_DISABLED_GROUPS', disabled.join(','));
+  sp.setProperty('MORNING_CALL_ENABLED_GROUPS', enabled.join(','));
+}
+
+function buildBossFlex(props) {
+  cleanupStaleStatus(); // 開面板前先清 stale
+  var map = getGroupRoomMap();
+  var known = getKnownGroups();
+  var disabled = _getDisabledGroupList();
+  var enabled = _getMorningEnabledList();
+  var whitelist = props && props.LINE_USER_ID_WHITELIST
+    ? props.LINE_USER_ID_WHITELIST.split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+    : [];
+
+  var bubbles = [_overviewBubble(known, map, disabled, enabled, whitelist)];
+
+  var bound = [], unbound = [];
+  known.forEach(function (gid) { (map[gid] ? bound : unbound).push(gid); });
+  // 排序：自訂順序優先、沒列到的按房號字母序排後面
+  var order = getGroupOrder();
+  bound.sort(function (a, b) {
+    var ra = map[a], rb = map[b];
+    var ia = order.indexOf(ra), ib = order.indexOf(rb);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return ra < rb ? -1 : 1;
+  });
+
+  bound.forEach(function (gid) {
+    bubbles.push(_groupBubble(gid, map[gid], disabled.indexOf(gid) === -1, enabled.indexOf(gid) !== -1));
+  });
+  unbound.forEach(function (gid) {
+    bubbles.push(_unboundBubble(gid, disabled.indexOf(gid) === -1, enabled.indexOf(gid) !== -1));
+  });
+
+  if (bubbles.length > 12) bubbles = bubbles.slice(0, 12); // LINE carousel 上限
+
+  return {
+    type: 'flex',
+    altText: '📋 LifeOS bot 管理面板（' + known.length + ' 個群組）',
+    contents: { type: 'carousel', contents: bubbles },
+  };
+}
+
+function _overviewBubble(known, map, disabled, enabled, whitelist) {
+  var bound = known.filter(function (g) { return map[g]; }).length;
+  return {
+    type: 'bubble', size: 'kilo',
+    header: { type: 'box', layout: 'vertical', contents: [
+      { type: 'text', text: '📋 管理面板', weight: 'bold', size: 'lg' },
+      { type: 'text', text: 'bot moneyhouse', size: 'xs', color: '#888888' },
+    ]},
+    body: { type: 'box', layout: 'vertical', spacing: 'xs', contents: [
+      { type: 'text', text: '群組總數：' + known.length, size: 'sm' },
+      { type: 'text', text: '已綁房號：' + bound, size: 'sm' },
+      { type: 'text', text: '早安開啟：' + enabled.length, size: 'sm' },
+      { type: 'text', text: '翻譯開啟：' + Math.max(0, known.length - disabled.length) + ' / ' + known.length, size: 'sm' },
+      { type: 'separator', margin: 'md' },
+      { type: 'text', text: '管理員：' + whitelist.length + ' 位' + (whitelist.length === 0 ? '（⚠️ 寬鬆模式）' : ''), size: 'xs', color: '#888888', margin: 'md' },
+    ]},
+    footer: { type: 'box', layout: 'vertical', spacing: 'xs', contents: [
+      { type: 'button', style: 'link', height: 'sm', action: { type: 'postback', label: '文字版面板', data: 'action=show_text' }},
+    ]},
+  };
+}
+
+function _groupBubble(groupId, roomLabel, translateOn, morningOn) {
+  var encodedGid = encodeURIComponent(groupId);
+  return {
+    type: 'bubble', size: 'kilo',
+    header: { type: 'box', layout: 'vertical', contents: [
+      { type: 'text', text: roomLabel + ' 房', weight: 'bold', size: 'xl' },
+      { type: 'text', text: '...' + groupId.slice(-6), size: 'xs', color: '#888888' },
+    ]},
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+      { type: 'text', text: '翻譯：' + (translateOn ? '✅ 開啟' : '❌ 關閉') },
+      { type: 'text', text: '早安：' + (morningOn ? '✅ 開啟' : '❌ 關閉') },
+    ]},
+    footer: { type: 'box', layout: 'vertical', spacing: 'xs', contents: [
+      { type: 'button', style: morningOn ? 'secondary' : 'primary', height: 'sm', action: {
+        type: 'postback', label: morningOn ? '早安關' : '早安開',
+        data: 'action=toggle_morning&groupId=' + encodedGid + '&value=' + (morningOn ? 'off' : 'on'),
+      }},
+      { type: 'button', style: translateOn ? 'secondary' : 'primary', height: 'sm', action: {
+        type: 'postback', label: translateOn ? '翻譯關' : '翻譯開',
+        data: 'action=toggle_translate&groupId=' + encodedGid + '&value=' + (translateOn ? 'off' : 'on'),
+      }},
+      { type: 'button', style: 'link', height: 'sm', action: {
+        type: 'postback', label: '解綁',
+        data: 'action=unbind&groupId=' + encodedGid,
+      }},
+    ]},
+  };
+}
+
+function _unboundBubble(groupId, translateOn, morningOn) {
+  var encodedGid = encodeURIComponent(groupId);
+  return {
+    type: 'bubble', size: 'kilo',
+    header: { type: 'box', layout: 'vertical', contents: [
+      { type: 'text', text: '未綁定', weight: 'bold', size: 'lg', color: '#888888' },
+      { type: 'text', text: '...' + groupId.slice(-6), size: 'xs', color: '#888888' },
+    ]},
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+      { type: 'text', text: '翻譯：' + (translateOn ? '✅' : '❌'), size: 'sm' },
+      { type: 'text', text: '早安：' + (morningOn ? '✅' : '❌'), size: 'sm' },
+      { type: 'separator', margin: 'md' },
+      { type: 'text', text: '👉 在群組裡打：', size: 'xs', color: '#888888', margin: 'md' },
+      { type: 'text', text: 'bot 設定房號 X', size: 'xs', weight: 'bold' },
+    ]},
+    footer: { type: 'box', layout: 'vertical', contents: [
+      { type: 'button', style: 'link', height: 'sm', action: {
+        type: 'postback', label: '從面板移除',
+        data: 'action=unbind&groupId=' + encodedGid,
+      }},
+    ]},
+  };
+}
+
+// === Postback 處理（卡片按鈕觸發）===
+function handlePostback(event, props) {
+  var userId = event.source && event.source.userId;
+  // 授權檢查（卡片按鈕 = 管理員操作，未授權靜默）
+  if (!isBossAuthorized(userId, props)) {
+    if (props.DEBUG_LOG) console.log('Unauthorized postback userId:', userId);
+    return;
+  }
+  var data = event.postback && event.postback.data;
+  if (!data) return;
+
+  var params = {};
+  data.split('&').forEach(function (kv) {
+    var i = kv.indexOf('=');
+    if (i === -1) return;
+    params[kv.substring(0, i)] = decodeURIComponent(kv.substring(i + 1));
+  });
+
+  var action = params.action || '';
+  var msg = '';
+
+  if (action === 'toggle_morning') {
+    setMorningEnabled(params.groupId, params.value === 'on');
+    msg = '✅ 已切換早安為「' + (params.value === 'on' ? '開啟' : '關閉') + '」';
+  } else if (action === 'toggle_translate') {
+    setTranslateDisabled(params.groupId, params.value === 'off');
+    msg = '✅ 已切換翻譯為「' + (params.value === 'on' ? '開啟' : '關閉') + '」';
+  } else if (action === 'unbind') {
+    msg = handleUnbind(params.groupId);
+  } else if (action === 'batch') {
+    var batchMap = {
+      'morning_on': { type: 'toggle_all', target: '早安', action: 'on' },
+      'morning_off': { type: 'toggle_all', target: '早安', action: 'off' },
+      'translate_on': { type: 'toggle_all', target: '翻譯', action: 'on' },
+      'translate_off': { type: 'toggle_all', target: '翻譯', action: 'off' },
+    };
+    var cmd = batchMap[params.op];
+    msg = cmd ? handleBatchCommand(cmd) : '❌ 未知批次操作';
+  } else if (action === 'show_text') {
+    reply(event.replyToken, [{ type: 'text', text: buildBossText(props) }], props);
+    return;
+  } else {
+    msg = '❌ 未知操作：' + action;
+  }
+
+  // 操作完成後重發 Flex 面板（讓 kabe 看到更新後狀態）
+  reply(event.replyToken, [
+    { type: 'text', text: msg },
+    buildBossFlex(props),
+  ], props);
+}
+
+// === 私訊管理指令（用房號 reference）===
+// 例：A 早安開啟 / B 翻譯關閉
+function detectAdminCommand(text) {
+  var t = (text || '').replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
+  // <房號> <對象> <動作>  例：A 早安 開啟
+  var m = t.match(/^(\S+)\s+(早安|翻譯)\s*(開啟|開|啟用|關閉|關|停止|狀態|查詢)$/);
+  if (!m) {
+    // 沒空白也接受：A早安開啟
+    m = t.match(/^(\S{1,5})(早安|翻譯)(開啟|開|啟用|關閉|關|停止|狀態|查詢)$/);
+    if (!m) return null;
+  }
+  var actionWord = m[3];
+  var action = /^(開啟|開|啟用)$/.test(actionWord) ? 'on'
+             : /^(關閉|關|停止)$/.test(actionWord) ? 'off'
+             : 'status';
+  return { roomLabel: m[1].toUpperCase(), target: m[2], action: action };
+}
+
+// === 自訂排序（私訊：排序 A B C）===
+function detectOrderCommand(text) {
+  var t = (text || '').replace(/^\s+|\s+$/g, '');
+  var m = t.match(/^(?:排序|順序|排列)\s+(.+)$/);
+  if (!m) return null;
+  return m[1].split(/[\s,，、]+/).map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean);
+}
+
+function handleOrderCommand(orderList) {
+  if (!orderList.length) return '❌ 請給房號清單，例：排序 A B C';
+  PropertiesService.getScriptProperties().setProperty('GROUP_ORDER', orderList.join(','));
+  return '✅ 已設定排序：' + orderList.join(' → ') + '\n\n（沒列到的房號會排在後面、按字母序）';
+}
+
+function getGroupOrder() {
+  var raw = PropertiesService.getScriptProperties().getProperty('GROUP_ORDER') || '';
+  return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+// === 批次指令（私訊：全部 X 開/關）===
+function detectBatchCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  var m = t.match(/^全部(早安|翻譯)(開啟|開|啟用|關閉|關|停止)$/);
+  if (m) {
+    var action = /^(開啟|開|啟用)$/.test(m[2]) ? 'on' : 'off';
+    return { type: 'toggle_all', target: m[1], action: action };
+  }
+  if (/^(全部解綁|全部解除綁定|全部清空|清空所有群組)$/.test(t)) {
+    return { type: 'unbind_all' };
+  }
+  return null;
+}
+
+function handleBatchCommand(cmd) {
+  var known = getKnownGroups();
+  if (!known.length) return '沒有任何已知群組';
+  if (cmd.type === 'toggle_all') {
+    var count = 0;
+    known.forEach(function (gid) {
+      if (cmd.target === '早安') setMorningEnabled(gid, cmd.action === 'on');
+      else setTranslateDisabled(gid, cmd.action === 'off'); // 翻譯邏輯反向：disabled=關閉
+      count++;
+    });
+    return '✅ 已對 ' + count + ' 個群組' + cmd.target + '：' + (cmd.action === 'on' ? '全部開啟' : '全部關閉');
+  }
+  if (cmd.type === 'unbind_all') {
+    var n = known.length;
+    known.forEach(function (gid) {
+      setMorningEnabled(gid, false);
+      setTranslateDisabled(gid, false);
+      setGroupSuspended(gid, true); // 全部停用，bot 在這些群組沉默
+    });
+    _setJsonProp('GROUP_ROOM_MAP', {});
+    _setJsonProp('KNOWN_GROUPS', []);
+    return '✅ 已清空所有 ' + n + ' 個群組綁定，bot 全部停用\n要重啟某個群組：在那群組打 bot 設定房號 X';
+  }
+  return '❌ 未知批次指令';
+}
+
+// 私訊用房號解綁：例 A 解綁 / 紙房子 解除綁定
+function detectAdminUnbindCommand(text) {
+  var t = (text || '').replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
+  var m = t.match(/^(\S{1,10})\s*(解綁|解除綁定|解除房號|取消綁定|清除房號|移除房號)$/);
+  if (!m) return null;
+  return m[1].toUpperCase();
+}
+
+function handleAdminUnbind(roomLabel) {
+  var groupId = getGroupByRoom(roomLabel);
+  if (!groupId) return '❌ 找不到房號「' + roomLabel + '」的群組';
+  return handleUnbind(groupId);
+}
+
+function handleAdminCommand(cmd) {
+  var groupId = getGroupByRoom(cmd.roomLabel);
+  if (!groupId) {
+    return '❌ 找不到房號「' + cmd.roomLabel + '」的群組\n（綁定方式：在該群組打 bot 設定房號 ' + cmd.roomLabel + '）';
+  }
+  if (cmd.target === '早安') {
+    if (cmd.action === 'on') { setMorningEnabled(groupId, true); return '✅「' + cmd.roomLabel + '」房早安：開啟'; }
+    if (cmd.action === 'off') { setMorningEnabled(groupId, false); return '✅「' + cmd.roomLabel + '」房早安：關閉'; }
+    return '「' + cmd.roomLabel + '」房早安：' + (isMorningEnabled(groupId) ? '開啟' : '關閉');
+  }
+  // 翻譯
+  if (cmd.action === 'on') { setTranslateDisabled(groupId, false); return '✅「' + cmd.roomLabel + '」房翻譯：開啟'; }
+  if (cmd.action === 'off') { setTranslateDisabled(groupId, true); return '✅「' + cmd.roomLabel + '」房翻譯：關閉'; }
+  return '「' + cmd.roomLabel + '」房翻譯：' + (isTranslateDisabled(groupId) ? '關閉' : '開啟');
+}
+
+// === Join event：bot 被加進群組 ===
+function handleJoinEvent(event, props) {
+  var groupId = (event.source && (event.source.groupId || event.source.roomId)) || null;
+  if (!groupId) return;
+  rememberGroup(groupId);
+  var welcome =
+    '👋 LifeOS 班表 bot 已加入\n\n' +
+    '請先為本群組編號：\n' +
+    'bot 設定房號 A\n' +
+    '（A 換成實際房號，例如 215、紙房子）\n\n' +
+    '編號後就能用 bot 查空檔、寫班表、開啟翻譯／早安叫醒等功能。';
+  if (event.replyToken) {
+    reply(event.replyToken, [{ type: 'text', text: welcome }], props);
+  }
+}
+
+// =============================================================
+// === 翻譯開關（每群組獨立，存 ScriptProperties）==============
+// =============================================================
+
+function detectTranslateToggleCommand(text) {
+  var t = (text || '').replace(/\s+/g, '');
+  if (/^(關閉翻譯|關翻譯|停止翻譯)$/.test(t)) return 'off';
+  if (/^(開啟翻譯|開翻譯|啟用翻譯)$/.test(t)) return 'on';
+  if (/^(查詢翻譯|翻譯狀態|翻譯)$/.test(t)) return 'status';
+  return null;
+}
+
+function _getDisabledGroupList() {
+  var raw = PropertiesService.getScriptProperties().getProperty('TRANSLATE_DISABLED_GROUPS') || '';
+  return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+function isTranslateDisabled(groupId) {
+  if (!groupId) return false;
+  return _getDisabledGroupList().indexOf(groupId) !== -1;
+}
+
+function setTranslateDisabled(groupId, disabled) {
+  if (!groupId) return;
+  var list = _getDisabledGroupList();
+  var idx = list.indexOf(groupId);
+  if (disabled && idx === -1) list.push(groupId);
+  else if (!disabled && idx !== -1) list.splice(idx, 1);
+  PropertiesService.getScriptProperties().setProperty('TRANSLATE_DISABLED_GROUPS', list.join(','));
+}
+
+function handleTranslateToggle(toggle, groupId) {
+  if (!groupId) return '❌ 此指令只能在群組使用';
+  if (toggle === 'off') {
+    setTranslateDisabled(groupId, true);
+    return '✅ 已關閉本群翻譯';
+  }
+  if (toggle === 'on') {
+    setTranslateDisabled(groupId, false);
+    return '✅ 已開啟本群翻譯';
+  }
+  // status
+  return '本群翻譯：' + (isTranslateDisabled(groupId) ? '關閉' : '開啟（中⇄泰自動翻譯）');
+}
+
+// =============================================================
 // === 翻譯（中泰雙向）=========================================
 // =============================================================
 
@@ -568,10 +1392,36 @@ function translateMessage(text, props) {
   if (!text) return null;
   var hasThai = /[฀-๿]/.test(text);
   var hasChinese = /[一-鿿]/.test(text);
-  if (!hasThai && !hasChinese) return null;
+  var hasEnglish = /[A-Za-z]/.test(text);
 
-  var direction = hasThai ? 'th2zh' : 'zh2th';
+  // 優先順序：
+  //   有泰文（含泰英混雜、泰中混雜）→ 翻中（th2zh）
+  //   有中文（含中英混雜）→ 翻泰（zh2th）
+  //   純英文（無泰無中）→ 翻中 + 翻泰兩行（en2both）
+  //   都沒有 → 不翻
+  // 用整段判定 direction，逐行翻譯時所有行共用同一個方向避免混亂
+  var direction;
+  if (hasThai) direction = 'th2zh';
+  else if (hasChinese) direction = 'zh2th';
+  else if (hasEnglish) direction = 'en2both';
+  else return null;
 
+  // 多行訊息：逐行翻譯，保留行結構（標點/分隔線/空行原樣保留）
+  // 理由：kabe 反映文字過多時 Gemini 翻不準；逐行送 API 比較精準
+  if (text.indexOf('\n') !== -1) {
+    return text.split('\n').map(function (line) {
+      // 空行原樣保留
+      if (!line.trim()) return line;
+      // 該行沒有任何翻譯目標語言字符（純符號 ~~ / 數字 / emoji）→ 原樣保留
+      if (!/[฀-๿一-鿿A-Za-z]/.test(line)) return line;
+      return translateOneLine(line, direction, props);
+    }).join('\n');
+  }
+
+  return translateOneLine(text, direction, props);
+}
+
+function translateOneLine(text, direction, props) {
   if (props.GEMINI_API_KEY) {
     try {
       return translateWithGemini(text, direction, props);
@@ -581,13 +1431,21 @@ function translateMessage(text, props) {
   }
   // Fallback：GAS 內建翻譯（品質較差但保證有譯文）
   if (direction === 'th2zh') return LanguageApp.translate(text, 'th', 'zh-TW');
-  return LanguageApp.translate(text, 'zh-TW', 'th');
+  if (direction === 'zh2th') return LanguageApp.translate(text, 'zh-TW', 'th');
+  if (direction === 'en2both') {
+    var zh = LanguageApp.translate(text, 'en', 'zh-TW');
+    var th = LanguageApp.translate(text, 'en', 'th');
+    return zh + '\n' + th;
+  }
+  return text;
 }
 
 function translateWithGemini(text, direction, props) {
-  var directionNote = direction === 'th2zh'
-    ? '把以下泰文翻譯成台灣繁體中文'
-    : '把以下中文翻譯成泰文';
+  var directionNote;
+  if (direction === 'th2zh') directionNote = '把以下泰文翻譯成台灣繁體中文';
+  else if (direction === 'zh2th') directionNote = '把以下中文翻譯成泰文';
+  else if (direction === 'en2both') directionNote = '把以下英文同時翻譯成 (1) 台灣繁體中文 (2) 泰文。輸出格式：第一行中文、第二行泰文，中間不加任何標籤、引號、編號';
+  else directionNote = '把以下中文翻譯成泰文';
 
   // === 行業術語對照表（必須遵守，之後新增請改這裡）============
   // 格式：'泰文 / 縮寫 = 中文（備註）'，一行一條
@@ -668,7 +1526,8 @@ function translateWithGemini(text, direction, props) {
     '- 中性陳述句翻成中性陳述句\n' +
     '\n' +
     '【輸出】\n' +
-    '- 只回譯文，不要加說明、引號、前綴' +
+    '- 只回譯文，不要加說明、引號、前綴\n' +
+    '- 保留原文的標點符號（。，！？～：等）原樣，不要刪減' +
     glossaryBlock + '\n' +
     '原文：\n' + text;
 
@@ -695,6 +1554,94 @@ function translateWithGemini(text, direction, props) {
     && data.candidates[0].content.parts[0].text;
   if (!output) throw new Error('Gemini returned empty');
   return String(output).trim();
+}
+
+// =============================================================
+// === LINE Push API + 早安叫醒排程 ============================
+// =============================================================
+// GAS trigger 設定：每 5 分鐘執行 sendMorningCall
+//   - 內部判斷只在 12:30-12:34 視窗發送
+//   - 用 LAST_MORNING_CALL_DATE 防同一天重發
+
+var MORNING_MESSAGE = 'ตื่นแล้วช่วยบอกสตาฟด้วยนะ และรีบแต่งหน้าให้เสร็จโดยเร็วที่สุดครับ';
+
+// 推訊息給所有管理員（用 LINE Push API，吃月配額但失敗才會發，量很小）
+function notifyAdmin(message, props) {
+  if (!props.LINE_USER_ID_WHITELIST) {
+    if (props.DEBUG_LOG) console.log('No whitelist set, skip notifyAdmin');
+    return;
+  }
+  var admins = props.LINE_USER_ID_WHITELIST.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  admins.forEach(function (uid) {
+    linePush(uid, message, props);
+  });
+}
+
+function linePush(toGroupId, text, props) {
+  try {
+    var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + props.LINE_CHANNEL_ACCESS_TOKEN },
+      payload: JSON.stringify({
+        to: toGroupId,
+        messages: [{ type: 'text', text: text }],
+      }),
+      muteHttpExceptions: true,
+    });
+    var code = res.getResponseCode();
+    if (props.DEBUG_LOG) console.log('LINE push to', toGroupId, code, res.getContentText());
+    return code === 200;
+  } catch (e) {
+    console.error('linePush exception:', e);
+    return false;
+  }
+}
+
+// 測試用：手動觸發早安推送（GAS 編輯器選函式 testMorningCall 執行）
+// 跳過時間檢查 + 不更新 LAST_MORNING_CALL_DATE（不影響正式排程）
+function testMorningCall() {
+  var props = getProps();
+  var enabled = _getMorningEnabledList();
+  if (!enabled.length) {
+    console.log('❌ 沒有群組開啟早安。先在群組打 bot 早安開啟');
+    return '沒有群組開啟早安';
+  }
+  console.log('Test: 推送早安訊息給', enabled.length, '個群組');
+  var results = [];
+  enabled.forEach(function (gid) {
+    var ok = linePush(gid, MORNING_MESSAGE, props);
+    var line = (ok ? '✅' : '❌') + ' ' + gid.slice(-6);
+    console.log('  ', line);
+    results.push(line);
+  });
+  return results.join('\n');
+}
+
+function sendMorningCall() {
+  var props = getProps();
+  var now = nowParts();
+
+  // 12:30-12:34 視窗外不執行（每 5 分鐘 trigger 會剛好命中其中一次）
+  if (now.h !== 12 || now.min < 30 || now.min > 34) return;
+
+  // 同一天只發一次
+  var todayKey = now.y + '-' + pad(now.mon) + '-' + pad(now.day);
+  var sp = PropertiesService.getScriptProperties();
+  if (sp.getProperty('LAST_MORNING_CALL_DATE') === todayKey) return;
+
+  var enabled = _getMorningEnabledList();
+  // 不論有沒有 enabled，都先記今天執行過，避免下個 5 分鐘 trigger 再進來判斷
+  sp.setProperty('LAST_MORNING_CALL_DATE', todayKey);
+
+  if (!enabled.length) {
+    if (props.DEBUG_LOG) console.log('Morning call: no enabled groups today');
+    return;
+  }
+
+  enabled.forEach(function (gid) {
+    linePush(gid, MORNING_MESSAGE, props);
+  });
 }
 
 function reply(replyToken, messages, props) {

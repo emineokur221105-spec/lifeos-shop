@@ -336,9 +336,10 @@
                 <code>{short}</code> 短名
                 <code>{badge}</code> 小標籤
                 <code>{count}</code> 人數
+                <code>{note}</code> 各地點自訂段內文字（在「📍 地點清單」每個地點點 ✏️ 編輯）
             </div>
             <div class="input-group"><label>頂部模板（可用：{date}）</label><textarea id="tpl-detailed-header" rows="5"></textarea></div>
-            <div class="input-group"><label>分店段開頭（可用：{label}, {short}, {badge}, {count}）</label><textarea id="tpl-detailed-sectionHead" rows="4"></textarea></div>
+            <div class="input-group"><label>分店段開頭（可用：{label}, {short}, {badge}, {count}, {note}）</label><textarea id="tpl-detailed-sectionHead" rows="4"></textarea></div>
             <div class="input-group"><label>分店間的分隔線</label><input type="text" id="tpl-detailed-sectionSep"></div>
             <div class="input-group"><label>名單與「個人詳細」之間的分隔線</label><input type="text" id="tpl-detailed-detailsSep"></div>
             <div class="input-group"><label>每個人詳細之間的分隔線</label><input type="text" id="tpl-detailed-personSep"></div>
@@ -366,6 +367,27 @@
         <div style="text-align: right; border-top:1px solid #eee; padding-top:15px; margin-top:20px;">
             <button type="button" onclick="closeSettings()" style="background:#95a5a6; color:white; border:0; padding:10px 20px; border-radius:5px; cursor:pointer; font-family:inherit; margin-right:6px;">取消</button>
             <button onclick="saveSettings()" class="btn btn-save" style="width: auto; padding: 10px 20px;">💾 儲存設定</button>
+        </div>
+    </div>
+</div>
+
+<div id="loc-edit-modal" class="modal">
+    <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header" style="display:flex; justify-content:space-between; padding-bottom:10px; border-bottom:1px solid #eee; margin-bottom:15px;">
+            <h3>✏️ 編輯地點 <span id="loc-edit-title" style="color:#7f8c8d; font-weight:normal; font-size:15px;"></span></h3>
+            <span class="close-modal" onclick="closeLocEditModal()" style="cursor:pointer; font-size:24px;">×</span>
+        </div>
+        <p style="color:#777; font-size:13px; margin:0 0 12px;">
+            「自訂段內文字」會在詳細版輸出時，插在 <code>【 地點 】</code> 標題下、「今日 X 位上班」之上。<br>
+            想生效需要詳細版模板的「分店段開頭」含 <code>{note}</code> 變數（已自動處理過）。空白則該地點不顯示這段。
+        </p>
+        <div class="input-group"><label>完整名稱（label）</label><input type="text" id="loc-edit-label"></div>
+        <div class="input-group"><label>小標籤（badge）</label><input type="text" id="loc-edit-badge"></div>
+        <div class="input-group"><label>短名（short）</label><input type="text" id="loc-edit-short"></div>
+        <div class="input-group"><label>📌 自訂段內文字（note，可多行）</label><textarea id="loc-edit-note" rows="5" placeholder="例：❌❌❌不接生客&#10;需成功消費3次以上"></textarea></div>
+        <div style="text-align: right; border-top:1px solid #eee; padding-top:15px; margin-top:10px;">
+            <button type="button" onclick="closeLocEditModal()" style="background:#95a5a6; color:white; border:0; padding:10px 20px; border-radius:5px; cursor:pointer; font-family:inherit; margin-right:6px;">取消</button>
+            <button type="button" onclick="confirmLocEdit()" class="btn btn-save" style="width: auto; padding: 10px 20px;">✓ 套用</button>
         </div>
     </div>
 </div>
@@ -427,16 +449,16 @@
 
     // ===== 地點清單預設（新租戶用） =====
     const DEFAULT_LOCATIONS = {
-        '某某街': { label: '某某街', badge: '【A】', short: '某街', order: 0 },
-        '某某路': { label: '某某路', badge: '【B】', short: '某路', order: 1 },
-        '某某巷': { label: '某某巷', badge: '【C】', short: '某巷', order: 2 }
+        '某某街': { label: '某某街', badge: '【A】', short: '某街', order: 0, note: '' },
+        '某某路': { label: '某某路', badge: '【B】', short: '某路', order: 1, note: '' },
+        '某某巷': { label: '某某巷', badge: '【C】', short: '某巷', order: 2, note: '' }
     };
 
     // ===== 文案模板預設 =====
     const DEFAULT_TEMPLATES = {
         detailed: {
             header: `{date}\n@all\n🔥定點上班表🔥\n\n下單請敲 ➡️➡️@你的派工名稱\n\n⭐️地區\n—————————————`,
-            sectionHead: `【 {label} 】\n今日 ({count}) 位上班`,
+            sectionHead: `【 {label} 】\n{note}\n今日 ({count}) 位上班`,
             sectionSep: `—————————————`,
             detailsSep: `=======================`,
             personSep: `————————`,
@@ -491,6 +513,7 @@
     });
 
     // ===== 地點 & 模板設定 live listener =====
+    let _isMigratingSectionHead = false;
     onValue(settingsRef, (snap) => {
         const s = snap.val();
         if (!s) {
@@ -511,6 +534,14 @@
                 },
                 fields: (Array.isArray(s.fields) && s.fields.length) ? s.fields.map(normalizeField) : JSON.parse(JSON.stringify(DEFAULT_FIELDS))
             };
+            // 補空 note 欄位（前向相容）
+            Object.keys(settings.locations).forEach(code => {
+                if (typeof settings.locations[code].note !== 'string') settings.locations[code].note = '';
+            });
+            // 一次性遷移：舊 sectionHead 沒 {note} → 抽中段塞進每個地點 note，sectionHead 改新格式
+            if (!_isMigratingSectionHead) {
+                migrateSectionHeadToNote();
+            }
         }
         // 重新渲染動態表單（保留當前編輯狀態）
         const prevId = currentId;
@@ -520,6 +551,35 @@
         else if (!prevId) createNewMember();
         if (Object.keys(allMembers).length) filterList();
     });
+
+    function migrateSectionHeadToNote() {
+        const sh = settings.templates.detailed.sectionHead || '';
+        if (sh.includes('{note}')) return; // 已遷移
+        const lines = sh.split('\n');
+        const labelIdx = lines.findIndex(l => l.includes('{label}') || l.includes('{badge}') || l.includes('{short}'));
+        const countIdx = lines.findIndex(l => l.includes('{count}'));
+        if (labelIdx < 0 || countIdx < 0 || countIdx <= labelIdx) return; // 結構不對，不動
+        const middle = lines.slice(labelIdx + 1, countIdx).join('\n').trim();
+        const newSH = lines.slice(0, labelIdx + 1).join('\n') + '\n{note}\n' + lines.slice(countIdx).join('\n');
+        settings.templates.detailed.sectionHead = newSH;
+        if (middle) {
+            Object.keys(settings.locations).forEach(code => {
+                if (!settings.locations[code].note) settings.locations[code].note = middle;
+            });
+        }
+        _isMigratingSectionHead = true;
+        set(settingsRef, {
+            locations: settings.locations,
+            templates: settings.templates,
+            fields: settings.fields
+        }).then(() => {
+            console.log('[migrate] sectionHead → {note} 完成');
+        }).catch(err => {
+            console.error('[migrate] 失敗', err);
+        }).finally(() => {
+            _isMigratingSectionHead = false;
+        });
+    }
 
     // ===== helpers =====
     function locationsSorted() {
@@ -916,8 +976,14 @@
         locs.forEach(loc => {
             const list = byLoc.get(loc.code) || [];
             if (list.length === 0) return;
-            let s = tplReplace(t.sectionHead, {
-                label: loc.label, short: loc.short, badge: loc.badge, count: list.length
+            const noteVal = loc.note || '';
+            let sh = t.sectionHead || '';
+            // 若 note 為空，去掉「獨佔一行的 {note}」整行避免留空行
+            if (!noteVal.trim()) {
+                sh = sh.replace(/\n\{note\}(?=\n|$)/g, '').replace(/^\{note\}\n/, '');
+            }
+            let s = tplReplace(sh, {
+                label: loc.label, short: loc.short, badge: loc.badge, count: list.length, note: noteVal
             }) + '\n\n';
             list.forEach(m => { s += `${m.name}\n\n`; });
             sections.push(s);
@@ -1002,20 +1068,59 @@
             const tr = document.createElement('tr');
             tr.className = 'loc-row';
             tr.setAttribute('data-code', loc.code);
+            tr.dataset.note = loc.note || '';
             const used = usage[loc.code] || 0;
+            const noteFlag = (loc.note && loc.note.trim()) ? '📌' : '';
             tr.innerHTML =
                 `<td><input type="text" class="loc-label" value="${escapeAttr(loc.label)}"></td>` +
                 `<td><input type="text" class="loc-badge" value="${escapeAttr(loc.badge)}"></td>` +
                 `<td><input type="text" class="loc-short" value="${escapeAttr(loc.short)}"></td>` +
                 `<td style="white-space:nowrap;">` +
                     `<span style="color:${used>0?'#e67e22':'#999'}; font-size:12px; margin-right:6px;">${used>0?`${used} 人`:'空'}</span>` +
+                    `<button type="button" class="loc-edit" title="編輯自訂段內文字（詳細版專用）" style="background:transparent; border:0; cursor:pointer; font-size:16px; margin-right:4px;">✏️${noteFlag}</button>` +
                     `<button class="loc-del" ${used>0?'disabled title="有員工使用中，不能刪"':'title="刪除此地點"'}>🗑️</button>` +
                 `</td>`;
             const delBtn = tr.querySelector('.loc-del');
             if (used === 0) delBtn.onclick = () => tr.remove();
+            const editBtn = tr.querySelector('.loc-edit');
+            editBtn.onclick = () => openLocEditModal(tr);
             tbody.appendChild(tr);
         });
     }
+
+    let _editingLocRow = null;
+    window.openLocEditModal = (tr) => {
+        _editingLocRow = tr;
+        const label = tr.querySelector('.loc-label').value;
+        const badge = tr.querySelector('.loc-badge').value;
+        const short = tr.querySelector('.loc-short').value;
+        const note = tr.dataset.note || '';
+        document.getElementById('loc-edit-title').textContent = label ? `（${label}）` : '';
+        document.getElementById('loc-edit-label').value = label;
+        document.getElementById('loc-edit-badge').value = badge;
+        document.getElementById('loc-edit-short').value = short;
+        document.getElementById('loc-edit-note').value = note;
+        document.getElementById('loc-edit-modal').classList.add('show');
+    };
+    window.closeLocEditModal = () => {
+        document.getElementById('loc-edit-modal').classList.remove('show');
+        _editingLocRow = null;
+    };
+    window.confirmLocEdit = () => {
+        if (!_editingLocRow) return closeLocEditModal();
+        const tr = _editingLocRow;
+        tr.querySelector('.loc-label').value = document.getElementById('loc-edit-label').value;
+        tr.querySelector('.loc-badge').value = document.getElementById('loc-edit-badge').value;
+        tr.querySelector('.loc-short').value = document.getElementById('loc-edit-short').value;
+        tr.dataset.note = document.getElementById('loc-edit-note').value;
+        const editBtn = tr.querySelector('.loc-edit');
+        if (editBtn) {
+            const flag = (tr.dataset.note && tr.dataset.note.trim()) ? '📌' : '';
+            editBtn.innerHTML = `✏️${flag}`;
+        }
+        closeLocEditModal();
+        showToast('✅ 已套用，記得按下方「💾 儲存設定」');
+    };
 
     // ===== 欄位管理 Tab =====
     let _fieldsSortable = null;
@@ -1090,12 +1195,17 @@
         const tr = document.createElement('tr');
         tr.className = 'loc-row';
         tr.setAttribute('data-code', ''); // 新增：code 會在儲存時用 label 產生
+        tr.dataset.note = '';
         tr.innerHTML =
             `<td><input type="text" class="loc-label" placeholder="例如 中正路"></td>` +
             `<td><input type="text" class="loc-badge" placeholder="例如 【中】"></td>` +
             `<td><input type="text" class="loc-short" placeholder="例如 中正"></td>` +
-            `<td><button class="loc-del" title="移除">🗑️</button></td>`;
+            `<td style="white-space:nowrap;">` +
+                `<button type="button" class="loc-edit" title="編輯自訂段內文字（詳細版專用）" style="background:transparent; border:0; cursor:pointer; font-size:16px; margin-right:4px;">✏️</button>` +
+                `<button class="loc-del" title="移除">🗑️</button>` +
+            `</td>`;
         tr.querySelector('.loc-del').onclick = () => tr.remove();
+        tr.querySelector('.loc-edit').onclick = () => openLocEditModal(tr);
         tbody.appendChild(tr);
         tr.querySelector('.loc-label').focus();
     };
@@ -1143,12 +1253,13 @@
             const label = tr.querySelector('.loc-label').value.trim();
             const badge = tr.querySelector('.loc-badge').value.trim();
             const short = tr.querySelector('.loc-short').value.trim();
+            const note = tr.dataset.note || '';
             if (!label) continue;
             const existingCode = tr.getAttribute('data-code') || '';
             const code = existingCode || label;
             if (seenCode.has(code)) { alert(`地點「${code}」重複，請修改名稱`); return; }
             seenCode.add(code);
-            newLocations[code] = { label, badge, short, order: order++ };
+            newLocations[code] = { label, badge, short, order: order++, note };
         }
         if (Object.keys(newLocations).length === 0) { alert('至少需要一個地點'); return; }
 

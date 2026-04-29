@@ -14,7 +14,9 @@
 ---
 
 ## 📍 當前狀態（一句話）
-**2026-04-27**：「現走」判斷加門檻 — 到下個客人 < 40 分 或 離下班 < 20 分 都不寫「現走」。網站 + bot 兩邊同步改。**待 kabe 跑 build + push、GAS 重新部署新版本**。前一輪未結項仍待補（GAS WHITELIST、regenerate LINE secret/token）。
+**2026-04-28（深夜 A+X 大改造）**：LINE bot 進化成**卡片管理介面**。`bot moneyhouse` 從文字清單升級成 LINE Flex Carousel（總覽卡 + 每群組一張卡 + 按鈕直接操作）；解綁 / 房號被覆蓋時舊群組自動進「停用」狀態，bot 徹底沉默直到 `bot 設定房號 X` 重啟；批次指令（`全部早安關閉` 等）、自訂排序（`排序 A B C`）、班表寫入失敗自動私訊 admin。早安時間從 12:40 改 12:30。kabe 紙房子規模 6 房（A/B/C/D/215/615）對應 LifeOS 排班，群組來來去去用「覆蓋」邏輯換綁。底下 2026-04-28 完整記錄保留前段，本次改動寫在最末三次追加區塊。
+
+**2026-04-28**：LINE bot 通知面大擴張 — (1) 寫班表回覆加泰文確認句「ตารางใหม่มาแล้ว...」；(2) **群組綁房號** `bot 設定房號 A`（重複設覆蓋）；(3) **早安叫醒** 12:40 自動推泰文起床訊息（群組獨立開關，預設關）；(4) **管理員面板** `bot moneyhouse`（動態列各群組房號/翻譯/早安狀態，原命名 `bot boss` 後改名為紙房子代號）；(5) **私訊用房號 reference 管理**（`A 早安開啟` / `A 翻譯關閉`）；(6) bot 加進群組自動發歡迎訊息引導設房號；(7) **解除綁定**（群組 `bot 解除綁定`、私訊 `A 解綁`，私訊版理由是 kabe 不想讓員工在群組看到自己設定）；(8) 房號**英文大小寫通用、內部統一存大寫**（中文房號不受影響）；(9) 私訊「無效指令」回覆精簡成兩行；(10) **翻譯加英文**：純英文 → 中文 + 泰文兩行；(11) **多行訊息逐行翻譯**：保留行結構、純符號行（`~~` 等）原樣保留；(12) Gemini prompt 加「保留標點符號」規則；(13) **白名單嚴格版（code 完成）**：加 `whoami` 指令拿 userId、`bot moneyhouse` 加授權檢查、未授權者群組裡完全靜默；BOSS_TEXT 末段顯示權限狀態。kabe 重新部署過、code 生效中。GAS time-based trigger（sendMorningCall 每 5 分鐘）+ LINE_USER_ID_WHITELIST 設定 kabe 自處理。歷久未結項仍待補（補 WHITELIST userId、regenerate LINE secret/token）。
 
 ## 🌐 入口
 - 線上首頁：https://emineokur221105-spec.github.io/lifeos-shop/
@@ -460,14 +462,315 @@ kabe 實際使用發現 bug：班表是 `4/27 妹客13.30 40/2400-1`（13:30 客
 | 02:50 看（closeHour=27 即 03:00），全天無客 | `現走` | （只剩名字） |
 | 13:00 看，14:00 有客（差 60 分） | `現走 14.00有客 15.10可約` | `現走 14.00有客 15.10可約`（不變）|
 
-### 本輪 commits（待 build + push）
+### 本輪 commits
 ```
-fix: 「現走」加門檻 — 到下個客 <40 分或離下班 <20 分時不寫
+2b2cf29 update（kabe 雙擊 .bat 預設訊息，內容 = app.js + Code.gs 兩處「現走」門檻修補）
 ```
 
+### 一鍵部署.bat 編碼修補（順手）
+- 原本 `chcp 65001` + 中文 echo 在 kabe 環境會把中文行當指令執行（'LifeOS-Shop' is not recognized…）
+- 改成全英文 echo，不靠 cmd 中文支援。bat 流程不變（git add . → commit → push）
+- 中文版的 git 指令其實有正常跑，亂碼只是 echo 顯示——commit 2b2cf29 就是中文版第一次點時推上去的，第二次點英文版才出現 nothing to commit
+
 ### 未結 / 待辦
-- [ ] kabe 跑 `node build.js` 或雙擊 `一鍵部署.bat`，commit + push（`02be413` 之後 app.js 又動過）
-- [ ] kabe 把 `linebot/Code.gs` 貼回 GAS 編輯器 → 部署 → 管理 → 鉛筆 → 新版本（不是新增部署，URL 才不會變）
+- [x] ~~網站部署~~ commit `2b2cf29` 已 push，GitHub Actions 已 deploy，kabe 確認生效
+- [x] ~~LINE bot 部署~~ kabe 已把 `Code.gs` 貼回 GAS、部署新版本，確認生效
+
+---
+
+## 📝 本次完整記錄（2026-04-27 晚）— bot 五項小改（下班/翻譯開關/教學/警告/約滿）
+
+### 背景
+kabe 提了五件事，全在 [linebot/Code.gs](linebot/Code.gs)：
+1. 下班時間想直接寫死 02:00，不要管網站填什麼（避免每個門市都要去網站設）
+2. bot 之後可能放進**台灣人群組**，但翻譯功能會無腦觸發（中文也會被翻成泰文），需要群組級開關
+3. bot 進到別人的群組，要讓老闆們知道有哪些查詢指令——加一個 `bot 查詢` 顯示教學
+4. 查空檔顯示時間會超過 02:00 下班（例 `03:20可約`）誤導老闆，所有查詢結果末尾要加警告
+5. 班表內容寫「約滿」時，bot 直接顯示「藝名 約滿」不要列細項（kabe 的班表慣用詞）
+
+### 改動
+
+**1) 下班時間寫死**
+- [linebot/Code.gs:194](linebot/Code.gs#L194) `loadContext`：原本 `var closeHour = settings.closeHour != null ? Number(settings.closeHour) : 27;`，改成 `var closeHour = 26;`（軸 26 = 隔日 02:00）
+- 影響：只用於「離下班 < 20 分不寫『現走』」判斷（[Code.gs:246-247](linebot/Code.gs#L246-L247)），不影響翻譯/班表寫入
+- **網站 `closeHour` 仍保留**（網站排班時間軸還在用），bot 端純粹忽略它
+
+**2) 群組翻譯開關（每群獨立）**
+- 新增區塊 `=== 翻譯開關（每群組獨立，存 ScriptProperties）===` 在 [Code.gs](linebot/Code.gs) 翻譯區塊上方
+- 函式：`detectTranslateToggleCommand`（偵測指令）/ `_getDisabledGroupList` / `isTranslateDisabled` / `setTranslateDisabled` / `handleTranslateToggle`
+- 儲存：ScriptProperties 的 `TRANSLATE_DISABLED_GROUPS`（comma-separated `groupId` list），第一次有人下指令時自動建立
+- 在 `handleEvent` 群組 `bot ` 前綴分支內加 toggle 偵測；無前綴分支「試翻譯」之前加 `if (isTranslateDisabled(groupId)) return;`
+- 指令（要 `bot ` 前綴）：
+  - `關閉翻譯` / `關翻譯` / `停止翻譯` → off
+  - `開啟翻譯` / `開翻譯` / `啟用翻譯` → on
+  - `查詢翻譯` / `翻譯狀態` / `翻譯` → status
+- 預設**開啟**（主場景是泰國工作群），加進台灣群組後才需要下指令關掉
+
+**3) `bot 查詢` 教學指令**
+- 新增 `HELP_TEXT` 常數 + `detectHelpCommand` 函式，放在 `=== 查詢模式判定 ===` 區塊上方
+- 在 `handleEvent` 後段（detectQueryMode 之前）加偵測，群組+私訊都生效
+- 指令：`查詢` / `教學` / `說明` / `指令` / `help`（前面要 `bot `，例 `bot 查詢`）
+- 教學內容只列「bot 現在 / bot <藝名> / bot 查詢」，**故意不列翻譯開關**——那是給管理員（kabe）的，不是給台灣群老闆看的
+
+**4) 查空檔末尾警告（OVERTIME_WARNING）**
+- 在 [Code.gs](linebot/Code.gs) `handleQuery` 加常數 `OVERTIME_WARNING = '\n\n服務時間超過02.00需詢問是否能加班'`
+- `mode === 'all'` 永遠附加；`mode === 'staff'` 找到員工才附加，「❌ 找不到」錯誤訊息不附加
+- **不在 formatStaffAvailability 內處理**：避免每個員工都重複這句，全表只在最後一行出現一次
+- iterate 過程：原本要做「01:20 後接單跨夜才警告」這種精細邏輯，kabe 後來決定簡化成「永遠加在末尾」——比邏輯判斷更穩，老闆每次都看到提醒比偶爾觸發好
+
+**5) 班表「約滿」直接顯示**
+- [Code.gs](linebot/Code.gs) `formatStaffAvailability` 開頭加 `if (/約滿/.test(content)) return prefixText + displayName + ' 約滿';`
+- 順手把 `displayName` / `prefixText` / `content` 變數宣告提到函式開頭（原本散在中間，提早 return 才能用）
+- 觸發條件：員工 `content` 任何一行包含「約滿」兩字 → 整行只顯示「【區】藝名 約滿」，跳過所有 task 解析
+
+### 設計取捨備忘
+- **預設開啟翻譯**而不是關閉：bot 主場景是泰國群，預設關會多一步啟用流程
+- **每群獨立**而不是全域開關：泰國群和台灣群同時存在的場景才需要這個機制
+- **教學不列翻譯開關**：避免老闆們看到管理員指令誤觸；他們需要的就是查空檔
+- **「翻譯」alias 包進 status 偵測**：很短的指令好記，不過 `bot 翻譯` 也會被當 status 顯示，不會誤翻
+- **`detectHelpCommand` 放在 `detectQueryMode` 之前**：不然「查詢」「教學」會被 `[一-龥]{2,6}` 當員工藝名查找
+- **「OVERTIME_WARNING 永遠加」勝過「條件式警告」**：iterate 一次後 kabe 決定不要精細邏輯。永遠提醒比智能但偶爾失準好懂
+- **「約滿」放 formatStaffAvailability 開頭提早 return**：避免後續 task 解析誤把「約滿」當怪 task
+
+### 部署遇到的小坑
+- 部署完群組第一次寫班表沒回應，私訊正常。等一下再試就 OK ——LINE webhook 對群組的緩存延遲，不是 code 問題。**未來再遇到先等 30 秒重試**，別急著回滾
+
+### 未結 / 待辦
+- [x] ~~kabe 把 Code.gs 貼回 GAS、部署新版本~~ 已部署、已測試全部五項生效
+- [x] ~~kabe 加進台灣群組後測試 `bot 關閉翻譯`~~ kabe 確認都成功了
+
+---
+
+## 📝 本次完整記錄（2026-04-28）— 通知面擴張：早安叫醒 + 管理員面板 + 群組綁房號
+
+### 背景
+kabe 想擴展 LINE bot **通知面**功能，列了四類選擇（員工群通知 / 老闆群通知 / 管理者警報 / 客戶通知）。先動兩件具體：
+1. bot 寫班表回覆訊息底下加泰文確認句（員工讀得懂、知道要回覆）
+2. 每天 12:40 自動推泰文起床訊息到群組（取代 kabe 一個個手動貼）
+
+設計過程中展開出「管理員指令面板」+「群組綁房號」概念，讓 kabe **私訊**就能遠端控制各群組設定（不用一個個進去群組打指令）。
+
+### 1) bot 寫班表回覆加泰文（[linebot/Code.gs](linebot/Code.gs) `writeScheduleToFirebase`）
+原本：`✅ 已更新 A房（京鮑吟） 2026/4/28`
+改後：
+```
+✅ 已更新 A房（京鮑吟）
+ตารางใหม่มาแล้ว เช็กและตอบด้วยนะ
+```
+**拿掉 `parsed.dateStr`** —— kabe 給的範例只有兩行，順他的意
+
+### 2) 群組房號綁定（新概念）
+新增 ScriptProperties：
+- `GROUP_ROOM_MAP` (JSON `{groupId: roomLabel}`) — 群組對應房號
+- `KNOWN_GROUPS` (JSON array) — bot 加入過 + 收過訊息的群組（給 boss 列清單用）
+
+**指令**（群組裡）：
+- `bot 設定房號 A`（也接受 `綁定房號 A` / `編號 A` / `設房號 A`）
+- 規則 `^(?:設定房號|綁定房號|編號|設房號)\s*(\S{1,10})$`，沒空白也接受
+- **重疊覆蓋**：同房號被新群組搶走 → 舊群組變未綁定（kabe 要的「直接覆蓋」）；實作在 `setGroupRoom` 設新值前掃 map 把同房號的別 groupId 刪掉
+
+**Join event 處理**：bot 被加進群組（`event.type === 'join'`）→ `handleJoinEvent` 自動發歡迎訊息引導設定房號 + 把 groupId 加進 KNOWN_GROUPS
+
+### 3) 早安叫醒功能
+- `MORNING_CALL_ENABLED_GROUPS` (csv groupId list) — 預設**關**
+- 群組指令：`bot 早安開啟` / `bot 早安關閉` / `bot 早安狀態`
+- 訊息內容：`ตื่นแล้วช่วยบอกสตาฟด้วยนะ และรีบแต่งหน้าให้เสร็จโดยเร็วที่สุดครับ`
+- LINE Push API（不是 reply）— 新加 `linePush(toGroupId, text, props)` helper
+- **GAS time-based trigger**：每 5 分鐘觸發 `sendMorningCall()`，內部判斷 12:40-12:44 視窗才執行
+- `LAST_MORNING_CALL_DATE` 防同一天重發（即使 trigger 跑兩次）
+
+**為什麼 5 分鐘 trigger 而不是 daily**：GAS daily trigger 落在「12:00-12:59 之間隨機」，無法精確 12:40。改成 5 分鐘 + 視窗判斷可達 ±2 分鐘精度。
+
+### 4) 管理員指令面板（`bot boss`）
+- 觸發詞：`boss` / `Boss` / `BOSS`（私訊或群組 `bot boss` 都可）
+- 動態生成 `BOSS_TEXT`：依 KNOWN_GROUPS 列每群組「房號：翻譯 開/關 / 早安 開/關」
+- 已綁房號排前面（按房號字母序），未綁的排後面標 `(...末6碼)`
+- **HELP_TEXT 不列 boss** —— 教學給員工/老闆看，boss 給管理員看，分流
+- **沒做 whitelist**（kabe 選**寬鬆版**）—— 任何人在群組打 `bot boss` 都會看到，靠教學不列保密
+
+### 5) 私訊用房號 reference 管理
+- `A 早安開啟` / `A 早安關閉` / `A 翻譯開啟` / `A 翻譯關閉`
+- regex：`^(\S{1,5})\s*(早安|翻譯)\s*(開啟|關閉|...)$`，沒空白也接受
+- `handleAdminCommand` 用 `getGroupByRoom(roomLabel)` 反查 groupId 再操作
+
+### handleEvent 整合
+1. 開頭加 `event.type === 'join'` 路徑 → `handleJoinEvent`
+2. 群組 `bot ` 前綴內，**翻譯開關之前**加：`detectRoomBindCommand`；**之後**加：`detectMorningToggleCommand`、`detectBossCommand`；首行加 `rememberGroup(groupId)`
+3. 群組無前綴：第一行加 `rememberGroup(groupId)`（任何訊息都記）
+4. 私訊區塊（trimmedText 之後、教學偵測之前）加：`detectBossCommand` + `detectAdminCommand`
+
+### 部署遇到的坑
+- **kabe 第一次貼 Code.gs 回 GAS 後新指令不通，重新部署一次才 OK** —— 老問題重演（GAS 必走「Deploy → 管理部署作業 → ✏️ 鉛筆 → 新版本」流程，不是儲存就生效）。**未來貼 GAS 直接寫 SOP**：「貼完 → 重新部署一次 → 才能測」
+
+### 設計取捨備忘
+- **早安預設關 vs 翻譯預設開**：相反設計，理由是場景不同——翻譯主場景是泰國群（預設要翻），早安要主動開（避免無意義噪音、避免 bot 加進老闆/管理群也亂叫醒）
+- **KNOWN_GROUPS 自動記錄**：bot 收到任何群組訊息時 add，省去 kabe 手動登記；副作用是 bot 進過所有群組都會出現在 boss 清單，包括測試群組
+- **重疊覆蓋方向**：後設的勝。如果有兩個群組要綁同一房號，後設的拿到、前設的被踢成未綁定狀態
+- **教學 vs Boss 分流**：HELP_TEXT 簡潔（員工/老闆看）、BOSS_TEXT 動態（管理員看），兩塊獨立維護
+- **admin 指令第二 token 必須是「早安/翻譯」**：避免跟「A 4/25 火雲14.20...」班表訊息或「A 蒼華」短指令誤匹配
+- **未綁房號群組顯示 `(...末6碼)`**：kabe 還能辨識（LINE groupId 是 32 字 hex，末 6 碼足以區分），不洩漏全 id
+
+### 後續追加（同對話內續做）
+
+**無效指令訊息精簡**
+- 私訊看不懂的回覆原本是「❓ 看不懂\n\n寫班表：A 4/25...\n\n查詢：現在 / 空檔 / <藝名>」
+- 改成兩行：「無效指令\n查詢:現在 空檔 <藝名>」
+- kabe 偏好簡潔，不要長 fallback
+
+**解除綁定指令**
+- 群組裡：`bot 解除綁定` / `取消綁定` / `解除房號` / `解綁` / `清除房號` / `移除房號`（任一觸發）
+- **私訊也加**：`A 解綁` / `紙房子 解除綁定` 等。**理由（重要）：kabe 不想讓員工在群組看到自己在做管理員設定**，私訊操作可以保密
+- 解綁找不到房號 → 回「❌ 找不到房號『A』的群組」
+- 解綁原本就沒綁 → 回「本群組原本就沒有綁定房號」
+
+**房號自動轉大寫**
+- `detectRoomBindCommand` / `detectAdminCommand` / `detectAdminUnbindCommand` 抓到房號都 `.toUpperCase()`
+- 內部存大寫、面板顯示大寫、私訊指令大小寫通用（`a 早安開啟` = `A 早安開啟`）
+- 中文房號（紙房子、響叮噹等）不受影響（JS toUpperCase 對中文無作用）
+
+**Boss 觸發詞改名 → moneyhouse**
+- `bot moneyhouse` 取代原本 `bot boss`，跟紙房子的系統代號 `moneyhouse` 一致
+- regex `/^moneyhouse$/i` 大小寫不敏感
+- BOSS_TEXT 內「【看這份清單】」也同步顯示 `bot moneyhouse`
+- **內部函式名／變數名保留 boss / BOSS**（`detectBossCommand`、`buildBossText`、`BOSS_TEXT`），是 code 內部代號不影響使用者，改了反而動到一堆地方
+
+**kabe 工作習慣備忘（重要）**
+- kabe 做完任何設定後會 `bot moneyhouse` 回管理員面板**確認當前狀態**
+- 任何設計新狀態（綁/解綁、開/關 翻譯/早安）都要確保 BOSS_TEXT 即時反映
+- 目前 BOSS_TEXT 是動態生成（不是快取），讀 GROUP_ROOM_MAP / TRANSLATE_DISABLED_GROUPS / MORNING_CALL_ENABLED_GROUPS 即時組裝 → 維持這個設計，未來加新狀態也要同步加進 BOSS_TEXT
+
+### 二次後續追加（同對話內續做）
+
+**白名單嚴格版（code 部分完成）**
+- 新增 `detectWhoamiCommand`（觸發詞：`whoami` / `我的id` / `查id` / `查userid`）+ `handleWhoami`：任何人都能查自己 userId（給 kabe 第一次設 whitelist 用）
+- 新增 `isBossAuthorized(userId, props)`：whitelist 空 = 寬鬆（誰都看 boss），有設 = 嚴格（只清單內 userId 看，其他人完全靜默 return）
+- 群組 `bot moneyhouse` 加授權檢查：未授權者完全靜默不洩漏指令存在
+- 私訊路徑：whoami 偵測**特意放在 whitelist 檢查之前**（讓未授權者也能拿到 userId，否則設定流程鎖死）
+- BOSS_TEXT 末段加「【權限狀態】」區塊：未設 → ⚠️ + 設定步驟；已設 → ✅ + 人數 + 末 6 碼
+- `buildBossText(props)` 簽名改接 props（要讀 whitelist），caller 同步傳
+
+**翻譯加英文支援（en2both）**
+- `translateMessage` 偵測順序加第三條：純英文（無泰無中）→ 翻中 + 翻泰兩行
+- 中英混雜走 zh2th；泰英混雜走 th2zh（hasThai 優先比，靠 glossary 處理英文行業術語 nocon/In/Out 等）
+- `translateWithGemini` 加 `en2both` directionNote：「同時翻譯成 (1) 台灣繁體中文 (2) 泰文，第一行中文、第二行泰文」
+- LanguageApp fallback：跑 en→zh-TW + en→th 兩次拼接
+
+**翻譯加多行逐行翻譯**
+- `translateMessage` 偵測到 `\n` → 切行 → 每行各自送 API → `\n` 拼回
+- 空行原樣保留；純符號行（`~~` / `--` / emoji 等沒語言字符的）原樣保留
+- 抽出 `translateOneLine` helper
+- **理由**：kabe 反映「文字過多翻譯不准」，逐行送 API 提升精準度
+- **副作用**：N 行有字 = N 次 API call，速度變慢、Gemini 額度變多。kabe 接受這個 trade-off
+
+**Gemini prompt 加保留標點規則**
+- 【輸出】區塊加「保留原文的標點符號（。，！？～：等）原樣，不要刪減」
+- 之前 Gemini 偶爾會省略標點
+
+### 已知偶發問題：班表寫入沒回應 + 沒寫進去
+
+- **現象**：群組裡貼班表，bot 偶爾沒回「✅ 已更新」**且資料也沒寫進 Firebase**
+- **頻率**：偶發（同樣訊息重發第二次通常會通）
+- **猜測原因**：LINE webhook 沒把 event 送到 GAS，或 GAS 處理過程 throw error 但被 try/catch 吞掉
+- **不是 @標記人員影響**：每個 LINE 訊息獨立 webhook event，後一則訊息不會蓋過前一則處理
+- **不是 reply token 過期**：那情境下 Firebase 仍會寫入，這次沒寫入就排除了
+- **SOP**：(1) 進網站看 A 房班表 → 沒資料就 (2) 重發一次。連續兩次都失敗才追 GAS 執行記錄
+- **若頻率變高（>3 次/天）**：考慮改用 LINE Push API 取代 Reply（沒 token 期限，但回應延遲 1-2 秒）；或把 writeScheduleToFirebase 跟 reply 分離（先寫成功再 reply，reply 失敗不影響資料）
+
+### 設計取捨備忘（這次的）
+- **whitelist 空 = 寬鬆**：避免「沒設就完全沒人能用」鎖死，kabe 設定前還能正常測試。kabe 設了 whitelist 才進嚴格模式
+- **whoami 永遠不擋**：第一次設定流程必經，避免 catch-22（沒在 whitelist 就拿不到 userId 補 whitelist）
+- **群組 boss 未授權靜默** vs **私訊整體 whitelist 擋**：兩個路徑不同保密層次。前者更嚴（不洩漏指令存在），後者整個私訊都不通
+- **逐行翻譯 vs 整段翻譯**：選逐行（精準度優先於速度）— kabe 不在乎成本/速度，要翻準
+- **泰英混雜走 th2zh** 而不是 en2both：kabe 主要場景是泰國工作群，主導語言是泰文，含英文術語（nocon/In/Out）由 glossary 處理
+
+### 三次後續追加（A+X 大改造，同對話內，2026-04-28 深夜）
+
+**緣由**：kabe 反映管理變麻煩 — 指令多記不住、多群組狀態追不過來、要一個個設、班表偶發失敗要進網站確認。先評估「網頁面板 vs LINE 卡片」，6 房規模（A/B/C/D/215/615 對應 LifeOS 排班）選 LINE Flex Carousel（網頁是殺雞用牛刀）。
+
+**A 部分：短期改動**
+1. **解綁徹底清空**（[Code.gs] `handleUnbind`）：解綁 = 房號釋出 + 翻譯狀態關 + 早安狀態關 + 從 KNOWN_GROUPS 移除 + **加進 SUSPENDED_GROUPS**（停用清單）
+2. **批次指令**（[Code.gs] `detectBatchCommand` / `handleBatchCommand`，私訊用）：
+   - `全部早安開啟` / `全部早安關閉`
+   - `全部翻譯開啟` / `全部翻譯關閉`
+   - `全部解綁` / `全部清空` / `清空所有群組` → 把全部 known groups 都加進 SUSPENDED_GROUPS
+3. **班表寫入失敗自動推 admin**（[Code.gs] `notifyAdmin` + handleEvent 三處 try/catch）：
+   - 群組無前綴寫班表、私訊 schedule、pending 三條路徑都包 try/catch
+   - 失敗時 `notifyAdmin` 用 LINE Push API（吃月配額但失敗才用、量極小）通知 LINE_USER_ID_WHITELIST 內所有人
+
+**X 部分：Flex 卡片化管理面板**
+1. **buildBossFlex**（[Code.gs]）：carousel 結構 = 1 張總覽卡 + 每群組一張卡（已綁優先 → 未綁排後面）
+   - 總覽卡：顯示總群組數 / 已綁 / 早安開啟數 / 翻譯開啟數 / 管理員人數 + 一個「文字版面板」連結
+   - 群組卡：房號 + 翻譯狀態 + 早安狀態 + 3 個 postback 按鈕（早安切換 / 翻譯切換 / 解綁）
+   - 未綁卡：顯示末 6 碼 + 引導去群組打 `bot 設定房號 X` + 一個「從面板移除」按鈕
+2. **handlePostback**（[Code.gs]）：卡片按鈕觸發 → 授權檢查（isBossAuthorized）→ dispatch（toggle_morning / toggle_translate / unbind / show_text / batch）→ 重發 Flex 面板讓 kabe 看到更新狀態
+3. handleEvent 入口加 `event.type === 'postback'` 路徑
+4. 群組 + 私訊 boss 偵測都改用 `buildBossFlex(props)` 取代 `buildBossText`，文字版透過按鈕「文字版面板」（postback action=show_text）切換
+
+**進階改動（接連而來）**
+
+**a) 拿掉總覽卡批次按鈕**
+- kabe 反映「全早安開/關 / 全翻譯開/關」4 個批次按鈕用不到
+- 拿掉，總覽卡 footer 只留「文字版面板」一個 link button
+- 批次邏輯保留私訊文字指令版本
+
+**b) 自訂排序指令**（[Code.gs] `detectOrderCommand` / `handleOrderCommand`）
+- 私訊 `排序 A B C` 或 `排序 A,C,B` 或 `排列 A、C、B`（空白/逗號/頓號分隔都接受）
+- 存 ScriptProperty `GROUP_ORDER` (csv)
+- buildBossFlex bound 群組依此排序，沒列到的按字母序排後面
+- 設定後永久生效，下次 `bot moneyhouse` 自動套用
+
+**c) cleanupStaleStatus**（修「翻譯開啟：-1 / 0」bug）
+- 殘留情境：早期某群組打過 `bot 關閉翻譯`，groupId 加入 TRANSLATE_DISABLED_GROUPS；後來該群組離開 KNOWN_GROUPS，但 disabled csv 沒清 → 統計時 `known.length(0) - disabled.length(1) = -1`
+- 解法：buildBossFlex / buildBossText 開頭呼叫 cleanupStaleStatus，把不在 KNOWN_GROUPS 的 gid 從 disabled / enabled csv 清掉
+- 順手加 Math.max(0, ...) 顯示防禦
+
+**d) 早安時間 12:40 → 12:30**
+- sendMorningCall 視窗 12:40-12:44 改成 12:30-12:34
+- 全檔 12:40 字串 replace 成 12:30（含 BOSS_TEXT、handleMorningToggle 訊息、code 註解）
+
+**e) 解綁邏輯重新理解（kabe 重新解釋後）**
+- 第一版做的是「主動解綁 = 停用」 → 但 kabe 真正的痛點是「**覆蓋**場景」（房號從群組 X 搬到群組 Y 時，群組 X 應自動失效）
+- 修法：`setGroupRoom` 內部處理覆蓋時，把被踢的舊 groupId `setGroupSuspended(true)`
+- handleRoomBind 訊息調整：「原『A』房群組已自動進入停用，bot 在那群組沉默直到重新綁定」
+- 主動解綁的 suspend 行為保留（一致性）
+- handleEvent 群組分支開頭加 `isGroupSuspended(groupId)` 檢查：是 → 例外允許 detectRoomBindCommand 通過、其他全靜默
+
+**f) bind 指令多 alias**（[Code.gs] `detectRoomBindCommand`）
+- 既有：`設定房號 A` / `綁定房號 A` / `編號 A` / `設房號 A`
+- 新增：`綁定 A` / `綁 A` / `A 綁定` / `A 綁`
+- 場景：覆蓋頻繁時用短指令快速重綁
+
+### 設計取捨備忘（A+X 改造）
+- **解綁=停用 vs 退群**：選停用（bot 還在群組沒退，員工不會 panic「bot 不見了」），但功能徹底沉默
+- **唯一例外是「設定房號」**：避免 kabe 重啟卡死（停用後完全收不到指令）
+- **「覆蓋」是主要場景而不是「主動解綁」**：kabe 紙房子實際工作流是員工換房 → 覆蓋；主動解綁很少用
+- **網頁面板 vs LINE 卡片**：選後者，6 房規模 LINE 卡片夠用，網頁是 1-2 週工程過度設計
+- **批次按鈕拿掉**：UI 整潔 > 一鍵方便（批次操作私訊文字指令保留）
+- **排序用文字指令**：6 房規模設一次就好，拖拉式 UI 不值得做
+- **postback action**（不是 message action）：按鈕點下不會在群組顯示「kabe 點了 X」，乾淨
+- **cleanup stale 在面板開啟時 lazy 執行**：不寫定時 cleanup（一致性靠 lazy 即可）
+
+### 已知限制 / 後續可能加的
+- LINE Flex carousel 上限 12 張卡 — 6 房沒問題，未來大規模才需分頁
+- 「覆蓋自動 suspend」對主動切換房號是預期行為，但若 kabe 不小心打 `bot 設定房號 A` 在錯誤群組會踢掉真的 A → 後悔的話打 `bot 設定房號 A` 在原群組就回得去（因為一樣是覆蓋邏輯）
+- 排序只支援已綁房號，未綁的群組永遠排後面（按 groupId 末 6 碼字母序）
+
+### 未結 / 待辦
+- [x] ~~kabe 在 GAS 設 `sendMorningCall` 的 time-based trigger（每 5 分鐘）~~（2026-04-28 深夜完成，每 5 分鐘觸發中，內部判斷 12:30-12:34 視窗才推送）
+- [ ] kabe 把 bot 加進測試群組驗證 join event 歡迎訊息
+- [ ] 等隔天 12:30 觀察自動推送是否生效
+- [x] ~~**kabe 設白名單**：私訊 bot 打 `whoami` → 抄 userId → GAS 指令碼屬性 `LINE_USER_ID_WHITELIST` 貼上 → 重新部署~~（2026-04-28 晚完成，嚴格模式生效中）
+- [ ] kabe 用一陣子卡片面板再評估：要不要做網頁版（規模長到 20+ 群組或要整合班表業績資料時值得做）
+- [ ] （從前幾輪繼續）Regenerate LINE secret + access token（之前對話有外洩）
+
+### 本輪改動範圍
+純改 [linebot/Code.gs](linebot/Code.gs)，網站沒動。新增三個 section：
+1. **群組房號綁定 + 早安開關 + Boss 管理員指令**（接近翻譯開關之前）
+2. **LINE Push API + 早安叫醒排程**（接近 reply 之前）
+3. handleEvent 整合（前述四處）
+
+### 本輪 commits
+（pending kabe 雙擊 `一鍵部署.bat` 推上去；改動只影響 GAS bot，不動網站；GAS 端已經透過貼上 + 重新部署生效）
 
 ---
 
