@@ -913,11 +913,11 @@ bot 寫的是 `shop_v8_daily_schedules`（每日排班），weekly.js 讀的是 
 - 進度檔本身才是 authoritative，未來 Claude 誤讀的風險低
 
 ### 未結 / 待辦
-- [ ] kabe 雙擊 `一鍵部署.bat` 推上去 → GitHub Actions 自動 build + deploy
+- [x] ~~kabe 雙擊 `一鍵部署.bat` 推上去~~（Claude 直接用 git 指令推，commit `1bbe737`）→ GitHub Actions 自動 build + deploy
 - [ ] 部署後驗證：開 shop 頁、開 weekly tab 看歷史資料能否正常顯示週結
 
 ### 本輪 commits
-（pending kabe 雙擊 `一鍵部署.bat`）
+- `1bbe737 fix: 移除 14 天自動清理 + weekly 改用 timestamp 取年份`
 
 ---
 
